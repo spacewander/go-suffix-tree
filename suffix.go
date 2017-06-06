@@ -186,13 +186,13 @@ func (node *Node) get(key []byte) (found bool, value interface{}) {
 	return false, nil
 }
 
-func (node *Node) Walk(suffix string, f func(key string, value interface{})) {
+func (node *Node) Walk(suffix []byte, f func(key []byte, value interface{})) {
 	for _, edge := range node.edges {
 		switch point := edge.point.(type) {
 		case *Leaf:
-			f(string(edge.label)+suffix, point.value)
+			f(append(edge.label, suffix...), point.value)
 		case *Node:
-			point.Walk(string(edge.label)+suffix, f)
+			point.Walk(append(edge.label, suffix...), f)
 		}
 	}
 }
@@ -209,10 +209,12 @@ func NewTree() *Tree {
 	}
 }
 
+// Insert suffix tree with given key and value
 func (tree *Tree) Insert(key []byte, value interface{}) (ok bool, oldValue interface{}) {
 	return tree.root.insert(key, value)
 }
 
+// Given a key, Get return a boolean to indicate whether the value is found and the value itself
 func (tree *Tree) Get(key []byte) (found bool, value interface{}) {
 	if len(tree.root.edges) == 0 {
 		return false, nil
@@ -220,6 +222,8 @@ func (tree *Tree) Get(key []byte) (found bool, value interface{}) {
 	return tree.root.get(key)
 }
 
-func (tree *Tree) Walk(f func(key string, value interface{})) {
-	tree.root.Walk("", f)
+// Walk through the tree, call function with key and value. Don't rely on the
+// travelling order.
+func (tree *Tree) Walk(f func(key []byte, value interface{})) {
+	tree.root.Walk([]byte{}, f)
 }

@@ -52,3 +52,23 @@ func TestGet_AncestorNodes(t *testing.T) {
 	assertGet(t, tree, "else", true)
 	assertGet(t, tree, "sth else", true)
 }
+
+func TestWalk(t *testing.T) {
+	tree := NewTree()
+	lists := []string{
+		"edible", "presentable", "abominable", "credible",
+		"picturesque", "statuesque", "nothing", "something", "thing", "nonsense",
+	}
+	for _, s := range lists {
+		tree.Insert([]byte(s), s)
+	}
+
+	result := map[string]string{}
+	tree.Walk(func(key []byte, value interface{}) {
+		result[string(key)] = value.(string)
+	})
+
+	for _, s := range lists {
+		assert.Equal(t, s, result[s])
+	}
+}
