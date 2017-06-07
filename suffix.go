@@ -44,8 +44,56 @@ type Node struct {
 	edges []*Edge
 }
 
+func (node *Node) insertEdge(edge *Edge) {
+	newEdgeLabelLen := len(edge.label)
+	idx := sort.Search(len(node.edges), func(i int) bool {
+		return newEdgeLabelLen < len(node.edges[i].label)
+	})
+	node.edges = append(node.edges, nil)
+	copy(node.edges[idx+1:], node.edges[idx:])
+	node.edges[idx] = edge
+}
+
+func (node *Node) removeEdge(idx int) {
+	copy(node.edges[idx:], node.edges[idx+1:])
+	node.edges[len(node.edges)-1] = nil
+	node.edges = node.edges[:len(node.edges)-1]
+}
+
+// Reorder edge which is not shorter than before
+func (node *Node) backwardEdge(idx int) {
+	edge := node.edges[idx]
+	edgeLabelLen := len(edge.label)
+	edgesLen := len(node.edges)
+	if idx == edgesLen-1 {
+		// Still longest, no need to change
+		return
+	}
+	// Get the first edge which's label is longer than this edge...
+	i := sort.Search(edgesLen-idx-1, func(j int) bool {
+		return edgeLabelLen < len(node.edges[j+idx+1].label)
+	})
+	// ... and insert before it. (Note that we just add `idx` instead of `idx+1`)
+	i += idx
+	copy(node.edges[idx:i], node.edges[idx+1:i+1])
+	node.edges[i] = edge
+}
+
+// Reorder edge which is shorter than before
+func (node *Node) forwardEdge(idx int) {
+	edge := node.edges[idx]
+	edgeLabelLen := len(edge.label)
+	i := sort.Search(idx, func(j int) bool {
+		return edgeLabelLen < len(node.edges[j].label)
+	})
+	copy(node.edges[i+1:idx+1], node.edges[i:idx])
+	node.edges[i] = edge
+}
+
 func (node *Node) insert(key []byte, value interface{}) (oldValue interface{}, ok bool) {
-	for i, edge := range node.edges {
+	// Iterate reversely to avoid matching empty label at first
+	for i := len(node.edges) - 1; i >= 0; i-- {
+		edge := node.edges[i]
 		gap := suffixDiff(key, edge.label)
 		if gap == 0 {
 			// CASE 1: key == label
@@ -121,11 +169,7 @@ func (node *Node) insert(key []byte, value interface{}) (oldValue interface{}, o
 			}
 			edge.point = newNode
 			edge.label = edge.label[len(edge.label)-gap+1:]
-			idx := sort.Search(i, func(j int) bool {
-				return len(edge.label) < len(node.edges[j].label)
-			})
-			copy(node.edges[idx+1:i+1], node.edges[idx:i])
-			node.edges[idx] = edge
+			node.forwardEdge(i)
 			return nil, true
 		}
 		// CASE 4: totally mismatch
@@ -138,29 +182,25 @@ func (node *Node) insert(key []byte, value interface{}) (oldValue interface{}, o
 		label: key,
 		point: leaf,
 	}
-	idx := sort.Search(len(node.edges), func(i int) bool {
-		return len(key) < len(node.edges[i].label)
-	})
-	node.edges = append(node.edges, nil)
-	copy(node.edges[idx+1:], node.edges[idx:])
-	node.edges[idx] = edge
+	node.insertEdge(edge)
 	return nil, true
 }
 
 func (node *Node) get(key []byte) (value interface{}, found bool) {
 	edges := node.edges
+	start := 0
 	if len(edges[0].label) == 0 {
 		// handle empty label as a special case, so the rest of labels don't share
 		// common suffix
 		if len(key) == 0 {
-			leaf, _ := edges[0].point.(Leaf)
+			leaf, _ := edges[0].point.(*Leaf)
 			return leaf.value, true
 		}
-		edges = edges[1:]
+		start += 1
 	}
 
 	keyLen := len(key)
-	for i := 0; i < len(edges); i++ {
+	for i := start; i < len(edges); i++ {
 		edge := edges[i]
 		edgeLabelLen := len(edge.label)
 		if keyLen > edgeLabelLen {
@@ -170,13 +210,17 @@ func (node *Node) get(key []byte) (value interface{}, found bool) {
 				case *Node:
 					return point.get(key)
 				}
+				// Illegal path reached
+				return nil, false
 			}
-		} else if bytes.Equal(key, edge.label) {
-			switch point := edge.point.(type) {
-			case *Leaf:
-				return point.value, true
-			case *Node:
-				return point.get([]byte{})
+		} else if keyLen == edgeLabelLen {
+			if bytes.Equal(key, edge.label) {
+				switch point := edge.point.(type) {
+				case *Leaf:
+					return point.value, true
+				case *Node:
+					return point.get([]byte{})
+				}
 			}
 		} else {
 			break
@@ -184,6 +228,71 @@ func (node *Node) get(key []byte) (value interface{}, found bool) {
 	}
 
 	return nil, false
+}
+
+func (node *Node) mergeChildNode(idx int, child *Node) {
+	if len(child.edges) == 1 {
+		edge := node.edges[idx]
+		edge.point = child.edges[0].point
+		edge.label = append(child.edges[0].label, edge.label...)
+		node.backwardEdge(idx)
+	}
+	// When child has only one edge, we will remove the child and merge its label,
+	// So there is no case that child has no edge.
+}
+
+func (node *Node) remove(key []byte) (value interface{}, found bool, childRemoved bool) {
+	edges := node.edges
+	start := 0
+	if len(edges[0].label) == 0 {
+		// handle empty label as a special case, so the rest of labels don't share
+		// common suffix
+		if len(key) == 0 {
+			leaf, _ := edges[0].point.(*Leaf)
+			value = leaf.value
+			node.removeEdge(0)
+			return value, true, true
+		}
+		start += 1
+	}
+
+	keyLen := len(key)
+	for i := start; i < len(edges); i++ {
+		edge := edges[i]
+		edgeLabelLen := len(edge.label)
+		if keyLen > edgeLabelLen {
+			if bytes.Equal(key[len(key)-len(edge.label):], edge.label) {
+				key := key[:len(key)-len(edge.label)]
+				switch point := edge.point.(type) {
+				case *Node:
+					value, found, childRemoved = point.remove(key)
+					if childRemoved {
+						node.mergeChildNode(i, point)
+					}
+					return value, found, false
+				}
+			}
+		} else if keyLen == edgeLabelLen {
+			if bytes.Equal(key, edge.label) {
+				switch point := edge.point.(type) {
+				case *Leaf:
+					value = point.value
+					node.removeEdge(i)
+					return value, true, true
+				case *Node:
+					value, found, childRemoved = point.remove([]byte{})
+					if childRemoved {
+						node.mergeChildNode(i, point)
+					}
+					return value, found, false
+				}
+			}
+		} else {
+			break
+		}
+	}
+
+	return nil, false, false
 }
 
 func (node *Node) Walk(suffix []byte, f func(key []byte, value interface{})) {
@@ -215,13 +324,23 @@ func (tree *Tree) Insert(key []byte, value interface{}) (oldValue interface{}, o
 	return tree.root.insert(key, value)
 }
 
-// Given a key, Get return the value itself and a boolean to indicate
+// Given a key, Get returns the value itself and a boolean to indicate
 // whether the value is found.
 func (tree *Tree) Get(key []byte) (value interface{}, found bool) {
 	if len(tree.root.edges) == 0 {
 		return nil, false
 	}
 	return tree.root.get(key)
+}
+
+// Given a key, Remove returns the value itself and a boolean to indicate
+// whethe the value is found. Then the value will be removed.
+func (tree *Tree) Remove(key []byte) (oldValue interface{}, found bool) {
+	if len(tree.root.edges) == 0 {
+		return nil, false
+	}
+	oldValue, found, _ = tree.root.remove(key)
+	return oldValue, found
 }
 
 // Walk through the tree, call function with key and value. Don't rely on the
