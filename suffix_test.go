@@ -8,17 +8,17 @@ import (
 
 func TestInsertReturn(t *testing.T) {
 	tree := NewTree()
-	ok, oldValue := tree.Insert([]byte("sth"), "sth")
+	oldValue, ok := tree.Insert([]byte("sth"), "sth")
 	assert.True(t, ok)
 	assert.Nil(t, oldValue)
 
-	ok, oldValue = tree.Insert([]byte("sth"), "else")
+	oldValue, ok = tree.Insert([]byte("sth"), "else")
 	assert.True(t, ok)
 	assert.Equal(t, "sth", oldValue.(string))
 }
 
 func assertGet(t *testing.T, tree *Tree, expectedValue string, expectedFound bool) {
-	found, value := tree.Get([]byte(expectedValue))
+	value, found := tree.Get([]byte(expectedValue))
 	assert.Equal(t, expectedFound, found, "expected ", expectedValue, "got nothing")
 	if expectedFound && value != nil {
 		assert.Equal(t, expectedValue, value.(string))

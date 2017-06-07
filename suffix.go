@@ -44,7 +44,7 @@ type Node struct {
 	edges []*Edge
 }
 
-func (node *Node) insert(key []byte, value interface{}) (ok bool, oldValue interface{}) {
+func (node *Node) insert(key []byte, value interface{}) (oldValue interface{}, ok bool) {
 	for i, edge := range node.edges {
 		gap := suffixDiff(key, edge.label)
 		if gap == 0 {
@@ -54,7 +54,7 @@ func (node *Node) insert(key []byte, value interface{}) (ok bool, oldValue inter
 				// Leaf hitted, replace old value
 				oldValue = point.value
 				point.value = value
-				return true, oldValue
+				return oldValue, true
 			case *Node:
 				// Node hitted, insert a leaf under this Node
 				return point.insert([]byte{}, value)
@@ -85,7 +85,7 @@ func (node *Node) insert(key []byte, value interface{}) (ok bool, oldValue inter
 					},
 				}
 				edge.point = newNode
-				return true, nil
+				return nil, true
 			case *Node:
 				// Before: Node - "label" -> Node - "" -> Leaf(Value1)
 				// After: Node - "label" - Node - "" -> Leaf(Value1)
@@ -126,7 +126,7 @@ func (node *Node) insert(key []byte, value interface{}) (ok bool, oldValue inter
 			})
 			copy(node.edges[idx+1:i+1], node.edges[idx:i])
 			node.edges[idx] = edge
-			return true, nil
+			return nil, true
 		}
 		// CASE 4: totally mismatch
 	}
@@ -144,17 +144,17 @@ func (node *Node) insert(key []byte, value interface{}) (ok bool, oldValue inter
 	node.edges = append(node.edges, nil)
 	copy(node.edges[idx+1:], node.edges[idx:])
 	node.edges[idx] = edge
-	return true, nil
+	return nil, true
 }
 
-func (node *Node) get(key []byte) (found bool, value interface{}) {
+func (node *Node) get(key []byte) (value interface{}, found bool) {
 	edges := node.edges
 	if len(edges[0].label) == 0 {
 		// handle empty label as a special case, so the rest of labels don't share
 		// common suffix
 		if len(key) == 0 {
 			leaf, _ := edges[0].point.(Leaf)
-			return true, leaf.value
+			return leaf.value, true
 		}
 		edges = edges[1:]
 	}
@@ -174,7 +174,7 @@ func (node *Node) get(key []byte) (found bool, value interface{}) {
 		} else if bytes.Equal(key, edge.label) {
 			switch point := edge.point.(type) {
 			case *Leaf:
-				return true, point.value
+				return point.value, true
 			case *Node:
 				return point.get([]byte{})
 			}
@@ -183,7 +183,7 @@ func (node *Node) get(key []byte) (found bool, value interface{}) {
 		}
 	}
 
-	return false, nil
+	return nil, false
 }
 
 func (node *Node) Walk(suffix []byte, f func(key []byte, value interface{})) {
@@ -209,15 +209,17 @@ func NewTree() *Tree {
 	}
 }
 
-// Insert suffix tree with given key and value
-func (tree *Tree) Insert(key []byte, value interface{}) (ok bool, oldValue interface{}) {
+// Insert suffix tree with given key and value. Return the previous value and a boolean to
+// indicate whether the insertion is successful.
+func (tree *Tree) Insert(key []byte, value interface{}) (oldValue interface{}, ok bool) {
 	return tree.root.insert(key, value)
 }
 
-// Given a key, Get return a boolean to indicate whether the value is found and the value itself
-func (tree *Tree) Get(key []byte) (found bool, value interface{}) {
+// Given a key, Get return the value itself and a boolean to indicate
+// whether the value is found.
+func (tree *Tree) Get(key []byte) (value interface{}, found bool) {
 	if len(tree.root.edges) == 0 {
-		return false, nil
+		return nil, false
 	}
 	return tree.root.get(key)
 }
