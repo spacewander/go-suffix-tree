@@ -91,8 +91,19 @@ func (node *Node) forwardEdge(idx int) {
 }
 
 func (node *Node) insert(key []byte, value interface{}) (oldValue interface{}, ok bool) {
-	// Iterate reversely to avoid matching empty label at first
-	for i := len(node.edges) - 1; i >= 0; i-- {
+	start := 0
+	if len(node.edges) > 0 && len(node.edges[0].label) == 0 {
+		// handle empty label as a special case, so the rest of labels don't share
+		// common suffix
+		if len(key) == 0 {
+			leaf, _ := node.edges[0].point.(*Leaf)
+			oldValue = leaf.value
+			leaf.value = value
+			return oldValue, true
+		}
+		start += 1
+	}
+	for i := start; i < len(node.edges); i++ {
 		edge := node.edges[i]
 		gap := suffixDiff(key, edge.label)
 		if gap == 0 {
@@ -210,8 +221,6 @@ func (node *Node) get(key []byte) (value interface{}, found bool) {
 				case *Node:
 					return point.get(key)
 				}
-				// Illegal path reached
-				return nil, false
 			}
 		} else if keyLen == edgeLabelLen {
 			if bytes.Equal(key, edge.label) {
@@ -306,6 +315,17 @@ func (node *Node) Walk(suffix []byte, f func(key []byte, value interface{})) {
 	}
 }
 
+func (node *Node) walkNode(suffix [][]byte, f func(labels [][]byte, value interface{})) {
+	for _, edge := range node.edges {
+		switch point := edge.point.(type) {
+		case *Leaf:
+			f(append([][]byte{edge.label}, suffix...), point.value)
+		case *Node:
+			point.walkNode(append([][]byte{edge.label}, suffix...), f)
+		}
+	}
+}
+
 type Tree struct {
 	root *Node
 }
@@ -347,4 +367,8 @@ func (tree *Tree) Remove(key []byte) (oldValue interface{}, found bool) {
 // travelling order.
 func (tree *Tree) Walk(f func(key []byte, value interface{})) {
 	tree.root.Walk([]byte{}, f)
+}
+
+func (tree *Tree) walkNode(f func(labels [][]byte, value interface{})) {
+	tree.root.walkNode([][]byte{}, f)
 }
