@@ -316,13 +316,24 @@ func (node *Node) Walk(suffix []byte, f func(key []byte, value interface{})) {
 }
 
 func (node *Node) walkNode(suffix [][]byte, f func(labels [][]byte, value interface{})) {
+	f(append([][]byte{nil}, suffix...), nil)
+	nodes := []*Edge{}
+	leaves := []*Edge{}
 	for _, edge := range node.edges {
-		switch point := edge.point.(type) {
+		switch edge.point.(type) {
 		case *Leaf:
-			f(append([][]byte{edge.label}, suffix...), point.value)
+			leaves = append(leaves, edge)
 		case *Node:
-			point.walkNode(append([][]byte{edge.label}, suffix...), f)
+			nodes = append(nodes, edge)
 		}
+	}
+	for _, edge := range leaves {
+		leaf, _ := edge.point.(*Leaf)
+		f(append([][]byte{edge.label}, suffix...), leaf.value)
+	}
+	for _, edge := range nodes {
+		node, _ := edge.point.(*Node)
+		node.walkNode(append([][]byte{edge.label}, suffix...), f)
 	}
 }
 
@@ -369,6 +380,7 @@ func (tree *Tree) Walk(f func(key []byte, value interface{})) {
 	tree.root.Walk([]byte{}, f)
 }
 
+// This API is for testing/debug
 func (tree *Tree) walkNode(f func(labels [][]byte, value interface{})) {
 	tree.root.walkNode([][]byte{}, f)
 }

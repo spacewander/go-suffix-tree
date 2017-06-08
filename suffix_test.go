@@ -153,6 +153,9 @@ func dumpTestData(wordRef map[string]bool, tree *Tree, ops []string, errMsg stri
 	}
 	println("\nTree nodes:")
 	tree.walkNode(func(labels [][]byte, value interface{}) {
+		if labels[0] == nil {
+			return
+		}
 		suffixes := []string{}
 		for _, l := range labels {
 			suffixes = append(suffixes, string(l))
@@ -163,10 +166,29 @@ func dumpTestData(wordRef map[string]bool, tree *Tree, ops []string, errMsg stri
 	println("Also dump operation records to", tmpfile.Name())
 }
 
+func checkLabelOrder(tree *Tree) (string, bool) {
+	var preLabelLen int
+	var msg string
+	inOrder := true
+	tree.walkNode(func(labels [][]byte, value interface{}) {
+		if labels[0] != nil {
+			if len(labels[0]) < preLabelLen {
+				msg = fmt.Sprintf("expect label len not shorter than %d, actual len(%s) is %d",
+					preLabelLen, string(labels[0]), len(labels[0]))
+				inOrder = false
+			}
+			preLabelLen = len(labels[0])
+		} else {
+			preLabelLen = 0
+		}
+	})
+	return msg, inOrder
+}
+
 func TestAlhoc(t *testing.T) {
 	println(`
 Start alhoc test.
-Repeat below steps in 10 seconds.
+Repeat below steps in 30 seconds.
 1. Generate 256 random words, and insert them into a new Tree.
 2. Perform 2048 random operations with pre-generated 256 words.
 3. Dump the generated test data once failed.
@@ -181,7 +203,7 @@ Repeat below steps in 10 seconds.
 	rand.Seed(time.Now().UnixNano())
 	letters := []byte("abcdefghijklmnopqrstuvwxyz")
 	testTurns := 0
-	testEnd := time.NewTimer(10 * time.Second)
+	testEnd := time.NewTimer(30 * time.Second)
 	var errMsg string
 	var tree *Tree
 	defer func() {
@@ -216,12 +238,18 @@ Repeat below steps in 10 seconds.
 			}
 			ops = append(ops, "Insert\t"+bs)
 			tree.Insert(b, bs)
-			nodes := 0
-			tree.walkNode(func(labels [][]byte, value interface{}) {
-				nodes += 1
-			})
-			if wordCount != nodes {
-				errMsg = fmt.Sprintf("expect %d words, actual %d", wordCount, nodes)
+			value, found := tree.Get(b)
+			if !found {
+				errMsg = fmt.Sprintf("expect get %v after insertion, actual not found", bs)
+			} else {
+				if value.(string) != bs {
+					errMsg = fmt.Sprintf("expect insert %v, actual %v", bs, value.(string))
+					goto failed
+				}
+			}
+			msg, inOrder := checkLabelOrder(tree)
+			if !inOrder {
+				errMsg = msg
 				goto failed
 			}
 		}
@@ -263,6 +291,11 @@ Repeat below steps in 10 seconds.
 				if !found {
 					errMsg = fmt.Sprintf("expect get %v after insertion, actual not found", word)
 				}
+				msg, inOrder := checkLabelOrder(tree)
+				if !inOrder {
+					errMsg = msg
+					goto failed
+				}
 			case 2:
 				existed := wordRef[word]
 				ops = append(ops, "Remove\t"+word)
@@ -280,6 +313,11 @@ Repeat below steps in 10 seconds.
 					_, found = tree.Get([]byte(word))
 					if found {
 						errMsg = fmt.Sprintf("expect %v not found after removal, actual found", word)
+					}
+					msg, inOrder := checkLabelOrder(tree)
+					if !inOrder {
+						errMsg = msg
+						goto failed
 					}
 				} else if existed {
 					errMsg = fmt.Sprintf("expect found %v in removal, actual not found", word)
