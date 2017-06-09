@@ -83,13 +83,6 @@ func TestGet_Base(t *testing.T) {
 	assertGet(t, tree, "any sth else", true)
 }
 
-func TestGet_Random(t *testing.T) {
-	lists, tree := getFixtures()
-	for _, s := range lists {
-		assertGet(t, tree, s, true)
-	}
-}
-
 // GetPredecessor is mostly like Get, but please notice their slight differnces.
 func assertGetPredecessor(t *testing.T, tree *Tree, expectedValue string,
 	expectedFound bool) {
@@ -166,18 +159,6 @@ func TestRemove_Base(t *testing.T) {
 	assert.True(t, found)
 	assertGet(t, tree, "else", false)
 	assertGet(t, tree, "sth else", true)
-}
-
-func TestRemove_Random(t *testing.T) {
-	lists, tree := getFixtures()
-	for _, s := range lists {
-		t.Log("Try to remove ", s)
-		assertGet(t, tree, s, true)
-		oldValue, found := tree.Remove([]byte(s))
-		assert.True(t, found)
-		assert.Equal(t, s, oldValue.(string))
-		assertGet(t, tree, s, false)
-	}
 }
 
 func TestWalk(t *testing.T) {
