@@ -294,10 +294,22 @@ Repeat below steps in 30 seconds.
 				goto failed
 			}
 		}
-		for s, _ := range wordRef {
+		for s := range wordRef {
 			randomWords = append(randomWords, s)
 		}
 		for i := 0; i < OpNum; i++ {
+			if OpNum%256 == 0 {
+				existedNum := 0
+				for _, existed := range wordRef {
+					if existed {
+						existedNum += 1
+					}
+				}
+				if tree.Len() != existedNum {
+					errMsg = fmt.Sprintf("expect len %v, actual %v", existedNum, tree.Len())
+					goto failed
+				}
+			}
 			word := randomWords[rand.Intn(WordNum)]
 			switch rand.Intn(4) {
 			case 0:

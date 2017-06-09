@@ -370,13 +370,13 @@ func (node *Node) remove(key []byte) (value interface{}, found bool, childRemove
 	return nil, false, false
 }
 
-func (node *Node) Walk(suffix []byte, f func(key []byte, value interface{})) {
+func (node *Node) walk(suffix []byte, f func(key []byte, value interface{})) {
 	for _, edge := range node.edges {
 		switch point := edge.point.(type) {
 		case *Leaf:
 			f(append(edge.label, suffix...), point.value)
 		case *Node:
-			point.Walk(append(edge.label, suffix...), f)
+			point.walk(append(edge.label, suffix...), f)
 		}
 	}
 }
@@ -404,7 +404,8 @@ func (node *Node) walkNode(suffix [][]byte, f func(labels [][]byte, value interf
 }
 
 type Tree struct {
-	root *Node
+	root      *Node
+	leavesNum int
 }
 
 func NewTree() *Tree {
@@ -412,13 +413,18 @@ func NewTree() *Tree {
 		root: &Node{
 			edges: []*Edge{},
 		},
+		leavesNum: 0,
 	}
 }
 
 // Insert suffix tree with given key and value. Return the previous value and a boolean to
 // indicate whether the insertion is successful.
 func (tree *Tree) Insert(key []byte, value interface{}) (oldValue interface{}, ok bool) {
-	return tree.root.insert(key, key, value)
+	oldValue, ok = tree.root.insert(key, key, value)
+	if ok && oldValue == nil {
+		tree.leavesNum += 1
+	}
+	return oldValue, ok
 }
 
 // Given a key, Get returns the value itself and a boolean to indicate
@@ -448,13 +454,21 @@ func (tree *Tree) Remove(key []byte) (oldValue interface{}, found bool) {
 		return nil, false
 	}
 	oldValue, found, _ = tree.root.remove(key)
+	if found {
+		tree.leavesNum -= 1
+	}
 	return oldValue, found
+}
+
+// Len returns the number of keys.
+func (tree *Tree) Len() int {
+	return tree.leavesNum
 }
 
 // Walk through the tree, call function with key and value. Don't rely on the
 // travelling order.
 func (tree *Tree) Walk(f func(key []byte, value interface{})) {
-	tree.root.Walk([]byte{}, f)
+	tree.root.walk([]byte{}, f)
 }
 
 // This API is for testing/debug
