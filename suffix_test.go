@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -10,6 +11,16 @@ import (
 
 	"github.com/stretchr/testify/assert"
 )
+
+var (
+	RunAlhoc = flag.Bool("alhoc", false, "Run alhoc testing")
+)
+
+// go test -args -alhoc to enable alhoc testing
+func TestMain(m *testing.M) {
+	flag.Parse()
+	m.Run()
+}
 
 func getFixtures() ([]string, *Tree) {
 	tree := NewTree()
@@ -77,6 +88,51 @@ func TestGet_Random(t *testing.T) {
 	for _, s := range lists {
 		assertGet(t, tree, s, true)
 	}
+}
+
+// GetPredecessor is mostly like Get, but please notice their slight differnces.
+func assertGetPredecessor(t *testing.T, tree *Tree, expectedValue string,
+	expectedFound bool) {
+
+	_, value, found := tree.GetPredecessor([]byte(expectedValue))
+	assert.Equal(t, expectedFound, found, "expected %s, got nothing", expectedValue)
+	if expectedFound && value != nil {
+		assert.Equal(t, expectedValue, value.(string))
+	}
+}
+
+func assertGetPredecessorCheckKey(t *testing.T, tree *Tree, expectedValue string,
+	expectedFound bool, expectedKey string) {
+
+	key, value, found := tree.GetPredecessor([]byte(expectedValue))
+	assert.Equal(t, expectedFound, found, "expected %s, got nothing", expectedValue)
+	if expectedFound && value != nil {
+		assert.Equal(t, expectedKey, string(key))
+		assert.Equal(t, expectedKey, value.(string))
+	}
+}
+
+func TestGetPredecessor_EmptyTree(t *testing.T) {
+	tree := NewTree()
+	assertGetPredecessor(t, tree, "banana", false)
+}
+
+func TestGetPredecessor_Base(t *testing.T) {
+	tree := NewTree()
+	tree.Insert([]byte("sth"), "sth")
+	assertGetPredecessor(t, tree, "th", false)
+	assertGetPredecessor(t, tree, "else", false)
+	assertGetPredecessorCheckKey(t, tree, "sth", true, "sth")
+	assertGetPredecessorCheckKey(t, tree, "any sth", true, "sth")
+
+	tree.Insert([]byte("else sth"), "else sth")
+	assertGetPredecessor(t, tree, "sth", true)
+	assertGetPredecessorCheckKey(t, tree, "lse sth", true, "sth")
+	assertGetPredecessorCheckKey(t, tree, "any else sth", true, "else sth")
+
+	tree.Insert([]byte("any sth"), "tenth")
+	assertGetPredecessor(t, tree, "th", false)
+	assertGetPredecessor(t, tree, "fourth", false)
 }
 
 func TestRemove_EmptyTree(t *testing.T) {
@@ -186,6 +242,9 @@ func checkLabelOrder(tree *Tree) (string, bool) {
 }
 
 func TestAlhoc(t *testing.T) {
+	if !*RunAlhoc {
+		t.SkipNow()
+	}
 	println(`
 Start alhoc test.
 Repeat below steps in 30 seconds.
@@ -202,6 +261,7 @@ Repeat below steps in 30 seconds.
 	ops := []string{}
 	rand.Seed(time.Now().UnixNano())
 	letters := []byte("abcdefghijklmnopqrstuvwxyz")
+	mismatchLetters := []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	testTurns := 0
 	testEnd := time.NewTimer(30 * time.Second)
 	var errMsg string
@@ -258,7 +318,7 @@ Repeat below steps in 30 seconds.
 		}
 		for i := 0; i < OpNum; i++ {
 			word := randomWords[rand.Intn(WordNum)]
-			switch rand.Intn(3) {
+			switch rand.Intn(4) {
 			case 0:
 				existed := wordRef[word]
 				ops = append(ops, "Get\t"+word)
@@ -322,6 +382,36 @@ Repeat below steps in 30 seconds.
 				} else if existed {
 					errMsg = fmt.Sprintf("expect found %v in removal, actual not found", word)
 					goto failed
+				}
+			case 3:
+				existed := wordRef[word]
+				mismatchLabel := make([]byte, rand.Intn(3))
+				for i := range mismatchLabel {
+					mismatchLabel[i] = mismatchLetters[rand.Intn(len(mismatchLetters))]
+				}
+				suffix := string(mismatchLabel) + word
+				ops = append(ops, "GetPredecessor\t"+suffix)
+				key, value, found := tree.GetPredecessor([]byte(suffix))
+				if existed {
+					if !found {
+						errMsg = fmt.Sprintf("expect getPredecessor found %v with %v, actual not found",
+							word, suffix)
+						goto failed
+					}
+					if value.(string) != string(key) {
+						errMsg = fmt.Sprintf(
+							"expect getPredecessor %v, actual %v", string(key), value.(string))
+						goto failed
+					}
+				} else {
+					if found {
+						if !strings.HasSuffix(suffix, string(key)) {
+							errMsg = fmt.Sprintf(
+								"expect getPredecessor found suffix matched %v, actual found %v",
+								suffix, string(key))
+							goto failed
+						}
+					}
 				}
 			}
 		}

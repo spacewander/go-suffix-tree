@@ -37,7 +37,10 @@ type Edge struct {
 }
 
 type Leaf struct {
-	value interface{}
+	// For GetPredecessor and so on. We choice to use more memory(24 bytes per node)
+	// over appending keys each time.
+	originKey []byte
+	value     interface{}
 }
 
 type Node struct {
@@ -90,7 +93,9 @@ func (node *Node) forwardEdge(idx int) {
 	node.edges[i] = edge
 }
 
-func (node *Node) insert(key []byte, value interface{}) (oldValue interface{}, ok bool) {
+func (node *Node) insert(originKey []byte, key []byte, value interface{}) (
+	oldValue interface{}, ok bool) {
+
 	start := 0
 	if len(node.edges) > 0 && len(node.edges[0].label) == 0 {
 		// handle empty label as a special case, so the rest of labels don't share
@@ -116,7 +121,7 @@ func (node *Node) insert(key []byte, value interface{}) (oldValue interface{}, o
 				return oldValue, true
 			case *Node:
 				// Node hitted, insert a leaf under this Node
-				return point.insert([]byte{}, value)
+				return point.insert(originKey, []byte{}, value)
 			}
 		} else if gap < 0 {
 			// CASE 2: key > label
@@ -138,7 +143,8 @@ func (node *Node) insert(key []byte, value interface{}) (oldValue interface{}, o
 						&Edge{
 							label: label,
 							point: &Leaf{
-								value: value,
+								originKey: originKey,
+								value:     value,
 							},
 						},
 					},
@@ -150,7 +156,7 @@ func (node *Node) insert(key []byte, value interface{}) (oldValue interface{}, o
 				// After: Node - "label" - Node - "" -> Leaf(Value1)
 				//							|- "s" -> Leaf(Value2)
 				// Insert a new Leaf with extra data as label
-				return point.insert(label, value)
+				return point.insert(originKey, label, value)
 			}
 		} else if gap > 1 {
 			// CASE 3: mismatch(key, label) after first letter or key < label
@@ -167,7 +173,8 @@ func (node *Node) insert(key []byte, value interface{}) (oldValue interface{}, o
 			keyEdge := &Edge{
 				label: key[:len(key)-gap+1],
 				point: &Leaf{
-					value: value,
+					originKey: originKey,
+					value:     value,
 				},
 			}
 			newNode := &Node{
@@ -187,7 +194,8 @@ func (node *Node) insert(key []byte, value interface{}) (oldValue interface{}, o
 	}
 
 	leaf := &Leaf{
-		value: value,
+		originKey: originKey,
+		value:     value,
 	}
 	edge := &Edge{
 		label: key,
@@ -218,6 +226,8 @@ func (node *Node) get(key []byte) (value interface{}, found bool) {
 			if bytes.Equal(key[len(key)-len(edge.label):], edge.label) {
 				key := key[:len(key)-len(edge.label)]
 				switch point := edge.point.(type) {
+				case *Leaf:
+					return nil, false
 				case *Node:
 					return point.get(key)
 				}
@@ -237,6 +247,62 @@ func (node *Node) get(key []byte) (value interface{}, found bool) {
 	}
 
 	return nil, false
+}
+
+func (node *Node) getPredecessor(key []byte) (matchedKey []byte, value interface{}, found bool) {
+	edges := node.edges
+	start := 0
+	if len(edges[0].label) == 0 {
+		// handle empty label as a special case, so the rest of labels don't share
+		// common suffix
+		if len(key) == 0 {
+			leaf, _ := edges[0].point.(*Leaf)
+			return leaf.originKey, leaf.value, true
+		}
+		start += 1
+	}
+
+	keyLen := len(key)
+	for i := start; i < len(edges); i++ {
+		edge := edges[i]
+		edgeLabelLen := len(edge.label)
+		if keyLen > edgeLabelLen {
+			if bytes.Equal(key[len(key)-len(edge.label):], edge.label) {
+				key := key[:len(key)-len(edge.label)]
+				switch point := edge.point.(type) {
+				case *Leaf:
+					return point.originKey, point.value, true
+				case *Node:
+					matchedKey, value, found := point.getPredecessor(key)
+					if found {
+						return matchedKey, value, found
+					}
+					// No exact match, fallback to suffix match
+				}
+			}
+		} else if keyLen == edgeLabelLen {
+			if bytes.Equal(key, edge.label) {
+				switch point := edge.point.(type) {
+				case *Leaf:
+					return point.originKey, point.value, true
+				case *Node:
+					matchedKey, value, found := point.getPredecessor([]byte{})
+					if found {
+						return matchedKey, value, found
+					}
+				}
+			}
+		} else {
+			break
+		}
+	}
+
+	if start == 1 {
+		leaf, _ := edges[0].point.(*Leaf)
+		return leaf.originKey, leaf.value, true
+	}
+
+	return nil, nil, false
 }
 
 func (node *Node) mergeChildNode(idx int, child *Node) {
@@ -352,7 +418,7 @@ func NewTree() *Tree {
 // Insert suffix tree with given key and value. Return the previous value and a boolean to
 // indicate whether the insertion is successful.
 func (tree *Tree) Insert(key []byte, value interface{}) (oldValue interface{}, ok bool) {
-	return tree.root.insert(key, value)
+	return tree.root.insert(key, key, value)
 }
 
 // Given a key, Get returns the value itself and a boolean to indicate
@@ -362,6 +428,17 @@ func (tree *Tree) Get(key []byte) (value interface{}, found bool) {
 		return nil, false
 	}
 	return tree.root.get(key)
+}
+
+// GetPredecessor is mostly like Get.
+// It returns the key which is the longest suffix of the given key,
+// and the value referred by this key.
+// Plus a boolean to indicate whether the key/value, is found.
+func (tree *Tree) GetPredecessor(key []byte) (matchedKey []byte, value interface{}, found bool) {
+	if len(tree.root.edges) == 0 {
+		return nil, nil, false
+	}
+	return tree.root.getPredecessor(key)
 }
 
 // Given a key, Remove returns the value itself and a boolean to indicate
