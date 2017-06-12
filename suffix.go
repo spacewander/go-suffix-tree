@@ -30,24 +30,24 @@ func suffixDiff(left, right []byte) int {
 	return -rightLen - 1
 }
 
-type Edge struct {
+type _Edge struct {
 	label []byte
 	// Could be either Node or Leaf
 	point interface{}
 }
 
-type Leaf struct {
+type _Leaf struct {
 	// For GetPredecessor and so on. We choice to use more memory(24 bytes per node)
 	// over appending keys each time.
 	originKey []byte
 	value     interface{}
 }
 
-type Node struct {
-	edges []*Edge
+type _Node struct {
+	edges []*_Edge
 }
 
-func (node *Node) insertEdge(edge *Edge) {
+func (node *_Node) insertEdge(edge *_Edge) {
 	newEdgeLabelLen := len(edge.label)
 	idx := sort.Search(len(node.edges), func(i int) bool {
 		return newEdgeLabelLen < len(node.edges[i].label)
@@ -57,14 +57,14 @@ func (node *Node) insertEdge(edge *Edge) {
 	node.edges[idx] = edge
 }
 
-func (node *Node) removeEdge(idx int) {
+func (node *_Node) removeEdge(idx int) {
 	copy(node.edges[idx:], node.edges[idx+1:])
 	node.edges[len(node.edges)-1] = nil
 	node.edges = node.edges[:len(node.edges)-1]
 }
 
 // Reorder edge which is not shorter than before
-func (node *Node) backwardEdge(idx int) {
+func (node *_Node) backwardEdge(idx int) {
 	edge := node.edges[idx]
 	edgeLabelLen := len(edge.label)
 	edgesLen := len(node.edges)
@@ -83,7 +83,7 @@ func (node *Node) backwardEdge(idx int) {
 }
 
 // Reorder edge which is shorter than before
-func (node *Node) forwardEdge(idx int) {
+func (node *_Node) forwardEdge(idx int) {
 	edge := node.edges[idx]
 	edgeLabelLen := len(edge.label)
 	i := sort.Search(idx, func(j int) bool {
@@ -93,7 +93,7 @@ func (node *Node) forwardEdge(idx int) {
 	node.edges[i] = edge
 }
 
-func (node *Node) insert(originKey []byte, key []byte, value interface{}) (
+func (node *_Node) insert(originKey []byte, key []byte, value interface{}) (
 	oldValue interface{}, ok bool) {
 
 	start := 0
@@ -101,7 +101,7 @@ func (node *Node) insert(originKey []byte, key []byte, value interface{}) (
 		// handle empty label as a special case, so the rest of labels don't share
 		// common suffix
 		if len(key) == 0 {
-			leaf, _ := node.edges[0].point.(*Leaf)
+			leaf, _ := node.edges[0].point.(*_Leaf)
 			oldValue = leaf.value
 			leaf.value = value
 			return oldValue, true
@@ -114,12 +114,12 @@ func (node *Node) insert(originKey []byte, key []byte, value interface{}) (
 		if gap == 0 {
 			// CASE 1: key == label
 			switch point := edge.point.(type) {
-			case *Leaf:
+			case *_Leaf:
 				// Leaf hitted, replace old value
 				oldValue = point.value
 				point.value = value
 				return oldValue, true
-			case *Node:
+			case *_Node:
 				// Node hitted, insert a leaf under this Node
 				return point.insert(originKey, []byte{}, value)
 			}
@@ -128,21 +128,21 @@ func (node *Node) insert(originKey []byte, key []byte, value interface{}) (
 			gap = -gap
 			label := key[:len(key)-gap+1]
 			switch point := edge.point.(type) {
-			case *Leaf:
+			case *_Leaf:
 				// Before: Node - "label" -> Leaf(Value1)
 				// After: Node - "label" - Node - "" -> Leaf(Value1)
 				//							|- "s" -> Leaf(Value2)
 				// Create new Node, move old Leaf under new Node, and then
 				//	insert a new Leaf
-				newNode := &Node{
-					edges: []*Edge{
-						&Edge{
+				newNode := &_Node{
+					edges: []*_Edge{
+						&_Edge{
 							label: []byte{},
 							point: point,
 						},
-						&Edge{
+						&_Edge{
 							label: label,
-							point: &Leaf{
+							point: &_Leaf{
 								originKey: originKey,
 								value:     value,
 							},
@@ -151,7 +151,7 @@ func (node *Node) insert(originKey []byte, key []byte, value interface{}) (
 				}
 				edge.point = newNode
 				return nil, true
-			case *Node:
+			case *_Node:
 				// Before: Node - "label" -> Node - "" -> Leaf(Value1)
 				// After: Node - "label" - Node - "" -> Leaf(Value1)
 				//							|- "s" -> Leaf(Value2)
@@ -166,19 +166,19 @@ func (node *Node) insert(originKey []byte, key []byte, value interface{}) (
 			// Before: Node - "label" -> Node/Leaf(Value1)
 			// After: Node - "lab" - Node - "el" -> Node/Leaf(Value1)
 			//							|- "or" -> Leaf(Value2)
-			newEdge := &Edge{
+			newEdge := &_Edge{
 				label: edge.label[:len(edge.label)-gap+1],
 				point: edge.point,
 			}
-			keyEdge := &Edge{
+			keyEdge := &_Edge{
 				label: key[:len(key)-gap+1],
-				point: &Leaf{
+				point: &_Leaf{
 					originKey: originKey,
 					value:     value,
 				},
 			}
-			newNode := &Node{
-				edges: make([]*Edge, 2),
+			newNode := &_Node{
+				edges: make([]*_Edge, 2),
 			}
 			if len(newEdge.label) < len(keyEdge.label) {
 				newNode.edges[0], newNode.edges[1] = newEdge, keyEdge
@@ -193,11 +193,11 @@ func (node *Node) insert(originKey []byte, key []byte, value interface{}) (
 		// CASE 4: totally mismatch
 	}
 
-	leaf := &Leaf{
+	leaf := &_Leaf{
 		originKey: originKey,
 		value:     value,
 	}
-	edge := &Edge{
+	edge := &_Edge{
 		label: key,
 		point: leaf,
 	}
@@ -205,14 +205,14 @@ func (node *Node) insert(originKey []byte, key []byte, value interface{}) (
 	return nil, true
 }
 
-func (node *Node) get(key []byte) (value interface{}, found bool) {
+func (node *_Node) get(key []byte) (value interface{}, found bool) {
 	edges := node.edges
 	start := 0
 	if len(edges[0].label) == 0 {
 		// handle empty label as a special case, so the rest of labels don't share
 		// common suffix
 		if len(key) == 0 {
-			leaf, _ := edges[0].point.(*Leaf)
+			leaf, _ := edges[0].point.(*_Leaf)
 			return leaf.value, true
 		}
 		start += 1
@@ -226,18 +226,18 @@ func (node *Node) get(key []byte) (value interface{}, found bool) {
 			if bytes.Equal(key[len(key)-len(edge.label):], edge.label) {
 				subKey := key[:len(key)-len(edge.label)]
 				switch point := edge.point.(type) {
-				case *Leaf:
+				case *_Leaf:
 					return nil, false
-				case *Node:
+				case *_Node:
 					return point.get(subKey)
 				}
 			}
 		} else if keyLen == edgeLabelLen {
 			if bytes.Equal(key, edge.label) {
 				switch point := edge.point.(type) {
-				case *Leaf:
+				case *_Leaf:
 					return point.value, true
-				case *Node:
+				case *_Node:
 					return point.get([]byte{})
 				}
 			}
@@ -249,14 +249,14 @@ func (node *Node) get(key []byte) (value interface{}, found bool) {
 	return nil, false
 }
 
-func (node *Node) getPredecessor(key []byte) (matchedKey []byte, value interface{}, found bool) {
+func (node *_Node) getPredecessor(key []byte) (matchedKey []byte, value interface{}, found bool) {
 	edges := node.edges
 	start := 0
 	if len(edges[0].label) == 0 {
 		// handle empty label as a special case, so the rest of labels don't share
 		// common suffix
 		if len(key) == 0 {
-			leaf, _ := edges[0].point.(*Leaf)
+			leaf, _ := edges[0].point.(*_Leaf)
 			return leaf.originKey, leaf.value, true
 		}
 		start += 1
@@ -270,9 +270,9 @@ func (node *Node) getPredecessor(key []byte) (matchedKey []byte, value interface
 			if bytes.Equal(key[len(key)-len(edge.label):], edge.label) {
 				subKey := key[:len(key)-len(edge.label)]
 				switch point := edge.point.(type) {
-				case *Leaf:
+				case *_Leaf:
 					return point.originKey, point.value, true
-				case *Node:
+				case *_Node:
 					matchedKey, value, found := point.getPredecessor(subKey)
 					if found {
 						return matchedKey, value, found
@@ -283,9 +283,9 @@ func (node *Node) getPredecessor(key []byte) (matchedKey []byte, value interface
 		} else if keyLen == edgeLabelLen {
 			if bytes.Equal(key, edge.label) {
 				switch point := edge.point.(type) {
-				case *Leaf:
+				case *_Leaf:
 					return point.originKey, point.value, true
-				case *Node:
+				case *_Node:
 					matchedKey, value, found := point.getPredecessor([]byte{})
 					if found {
 						return matchedKey, value, found
@@ -298,21 +298,21 @@ func (node *Node) getPredecessor(key []byte) (matchedKey []byte, value interface
 	}
 
 	if start == 1 {
-		leaf, _ := edges[0].point.(*Leaf)
+		leaf, _ := edges[0].point.(*_Leaf)
 		return leaf.originKey, leaf.value, true
 	}
 
 	return nil, nil, false
 }
 
-func (node *Node) getSuccessor(key []byte) (matchedKey []byte, value interface{}, found bool) {
+func (node *_Node) getSuccessor(key []byte) (matchedKey []byte, value interface{}, found bool) {
 	edges := node.edges
 	start := 0
 	if len(edges[0].label) == 0 {
 		// handle empty label as a special case, so the rest of labels don't share
 		// common suffix
 		if len(key) == 0 {
-			leaf, _ := edges[0].point.(*Leaf)
+			leaf, _ := edges[0].point.(*_Leaf)
 			return leaf.originKey, leaf.value, true
 		}
 		start += 1
@@ -326,18 +326,18 @@ func (node *Node) getSuccessor(key []byte) (matchedKey []byte, value interface{}
 			if bytes.Equal(key[len(key)-len(edge.label):], edge.label) {
 				subKey := key[:len(key)-len(edge.label)]
 				switch point := edge.point.(type) {
-				case *Leaf:
+				case *_Leaf:
 					return nil, nil, false
-				case *Node:
+				case *_Node:
 					return point.getSuccessor(subKey)
 				}
 			}
 		} else {
 			if bytes.HasSuffix(edge.label, key) {
 				switch point := edge.point.(type) {
-				case *Leaf:
+				case *_Leaf:
 					return point.originKey, point.value, true
-				case *Node:
+				case *_Node:
 					return point.getSuccessor([]byte{})
 				}
 			}
@@ -347,7 +347,7 @@ func (node *Node) getSuccessor(key []byte) (matchedKey []byte, value interface{}
 	return nil, nil, false
 }
 
-func (node *Node) mergeChildNode(idx int, child *Node) {
+func (node *_Node) mergeChildNode(idx int, child *_Node) {
 	if len(child.edges) == 1 {
 		edge := node.edges[idx]
 		edge.point = child.edges[0].point
@@ -358,14 +358,14 @@ func (node *Node) mergeChildNode(idx int, child *Node) {
 	// So there is no case that child has no edge.
 }
 
-func (node *Node) remove(key []byte) (value interface{}, found bool, childRemoved bool) {
+func (node *_Node) remove(key []byte) (value interface{}, found bool, childRemoved bool) {
 	edges := node.edges
 	start := 0
 	if len(edges[0].label) == 0 {
 		// handle empty label as a special case, so the rest of labels don't share
 		// common suffix
 		if len(key) == 0 {
-			leaf, _ := edges[0].point.(*Leaf)
+			leaf, _ := edges[0].point.(*_Leaf)
 			value = leaf.value
 			node.removeEdge(0)
 			return value, true, true
@@ -381,7 +381,7 @@ func (node *Node) remove(key []byte) (value interface{}, found bool, childRemove
 			if bytes.Equal(key[len(key)-len(edge.label):], edge.label) {
 				key := key[:len(key)-len(edge.label)]
 				switch point := edge.point.(type) {
-				case *Node:
+				case *_Node:
 					value, found, childRemoved = point.remove(key)
 					if childRemoved {
 						node.mergeChildNode(i, point)
@@ -392,11 +392,11 @@ func (node *Node) remove(key []byte) (value interface{}, found bool, childRemove
 		} else if keyLen == edgeLabelLen {
 			if bytes.Equal(key, edge.label) {
 				switch point := edge.point.(type) {
-				case *Leaf:
+				case *_Leaf:
 					value = point.value
 					node.removeEdge(i)
 					return value, true, true
-				case *Node:
+				case *_Node:
 					value, found, childRemoved = point.remove([]byte{})
 					if childRemoved {
 						node.mergeChildNode(i, point)
@@ -412,48 +412,48 @@ func (node *Node) remove(key []byte) (value interface{}, found bool, childRemove
 	return nil, false, false
 }
 
-func (node *Node) walk(suffix []byte, f func(key []byte, value interface{})) {
+func (node *_Node) walk(suffix []byte, f func(key []byte, value interface{})) {
 	for _, edge := range node.edges {
 		switch point := edge.point.(type) {
-		case *Leaf:
+		case *_Leaf:
 			f(append(edge.label, suffix...), point.value)
-		case *Node:
+		case *_Node:
 			point.walk(append(edge.label, suffix...), f)
 		}
 	}
 }
 
-func (node *Node) walkNode(suffix [][]byte, f func(labels [][]byte, value interface{})) {
+func (node *_Node) walkNode(suffix [][]byte, f func(labels [][]byte, value interface{})) {
 	f(append([][]byte{nil}, suffix...), nil)
-	nodes := []*Edge{}
-	leaves := []*Edge{}
+	nodes := []*_Edge{}
+	leaves := []*_Edge{}
 	for _, edge := range node.edges {
 		switch edge.point.(type) {
-		case *Leaf:
+		case *_Leaf:
 			leaves = append(leaves, edge)
-		case *Node:
+		case *_Node:
 			nodes = append(nodes, edge)
 		}
 	}
 	for _, edge := range leaves {
-		leaf, _ := edge.point.(*Leaf)
+		leaf, _ := edge.point.(*_Leaf)
 		f(append([][]byte{edge.label}, suffix...), leaf.value)
 	}
 	for _, edge := range nodes {
-		node, _ := edge.point.(*Node)
+		node, _ := edge.point.(*_Node)
 		node.walkNode(append([][]byte{edge.label}, suffix...), f)
 	}
 }
 
 type Tree struct {
-	root      *Node
+	root      *_Node
 	leavesNum int
 }
 
 func NewTree() *Tree {
 	return &Tree{
-		root: &Node{
-			edges: []*Edge{},
+		root: &_Node{
+			edges: []*_Edge{},
 		},
 		leavesNum: 0,
 	}
