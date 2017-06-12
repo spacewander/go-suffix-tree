@@ -1,4 +1,4 @@
-package main
+package suffix
 
 import (
 	"bytes"
