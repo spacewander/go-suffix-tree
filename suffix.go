@@ -224,12 +224,12 @@ func (node *Node) get(key []byte) (value interface{}, found bool) {
 		edgeLabelLen := len(edge.label)
 		if keyLen > edgeLabelLen {
 			if bytes.Equal(key[len(key)-len(edge.label):], edge.label) {
-				key := key[:len(key)-len(edge.label)]
+				subKey := key[:len(key)-len(edge.label)]
 				switch point := edge.point.(type) {
 				case *Leaf:
 					return nil, false
 				case *Node:
-					return point.get(key)
+					return point.get(subKey)
 				}
 			}
 		} else if keyLen == edgeLabelLen {
@@ -268,12 +268,12 @@ func (node *Node) getPredecessor(key []byte) (matchedKey []byte, value interface
 		edgeLabelLen := len(edge.label)
 		if keyLen > edgeLabelLen {
 			if bytes.Equal(key[len(key)-len(edge.label):], edge.label) {
-				key := key[:len(key)-len(edge.label)]
+				subKey := key[:len(key)-len(edge.label)]
 				switch point := edge.point.(type) {
 				case *Leaf:
 					return point.originKey, point.value, true
 				case *Node:
-					matchedKey, value, found := point.getPredecessor(key)
+					matchedKey, value, found := point.getPredecessor(subKey)
 					if found {
 						return matchedKey, value, found
 					}
@@ -300,6 +300,48 @@ func (node *Node) getPredecessor(key []byte) (matchedKey []byte, value interface
 	if start == 1 {
 		leaf, _ := edges[0].point.(*Leaf)
 		return leaf.originKey, leaf.value, true
+	}
+
+	return nil, nil, false
+}
+
+func (node *Node) getSuccessor(key []byte) (matchedKey []byte, value interface{}, found bool) {
+	edges := node.edges
+	start := 0
+	if len(edges[0].label) == 0 {
+		// handle empty label as a special case, so the rest of labels don't share
+		// common suffix
+		if len(key) == 0 {
+			leaf, _ := edges[0].point.(*Leaf)
+			return leaf.originKey, leaf.value, true
+		}
+		start += 1
+	}
+
+	keyLen := len(key)
+	for i := start; i < len(edges); i++ {
+		edge := edges[i]
+		edgeLabelLen := len(edge.label)
+		if keyLen > edgeLabelLen {
+			if bytes.Equal(key[len(key)-len(edge.label):], edge.label) {
+				subKey := key[:len(key)-len(edge.label)]
+				switch point := edge.point.(type) {
+				case *Leaf:
+					return nil, nil, false
+				case *Node:
+					return point.getSuccessor(subKey)
+				}
+			}
+		} else {
+			if bytes.HasSuffix(edge.label, key) {
+				switch point := edge.point.(type) {
+				case *Leaf:
+					return point.originKey, point.value, true
+				case *Node:
+					return point.getSuccessor([]byte{})
+				}
+			}
+		}
 	}
 
 	return nil, nil, false
@@ -445,6 +487,16 @@ func (tree *Tree) GetPredecessor(key []byte) (matchedKey []byte, value interface
 		return nil, nil, false
 	}
 	return tree.root.getPredecessor(key)
+}
+
+// GetSuccessor returns the shortest key of which given key is the suffix of it.
+// Plus the value referred by this key and a boolean to indicate whether the key is found.
+// Note that if multiple keys matched, which one would be returned is undefined.
+func (tree *Tree) GetSuccessor(key []byte) (matchedKey []byte, value interface{}, found bool) {
+	if len(tree.root.edges) == 0 {
+		return nil, nil, false
+	}
+	return tree.root.getSuccessor(key)
 }
 
 // Given a key, Remove returns the value itself and a boolean to indicate

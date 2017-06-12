@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -48,7 +49,7 @@ func TestInsertReturn(t *testing.T) {
 
 func assertGet(t *testing.T, tree *Tree, expectedValue string, expectedFound bool) {
 	value, found := tree.Get([]byte(expectedValue))
-	assert.Equal(t, expectedFound, found, "expected %s, got nothing", expectedValue)
+	assert.Equal(t, expectedFound, found)
 	if expectedFound && value != nil {
 		assert.Equal(t, expectedValue, value.(string))
 	}
@@ -84,23 +85,21 @@ func TestGet_Base(t *testing.T) {
 }
 
 // GetPredecessor is mostly like Get, but please notice their slight differnces.
-func assertGetPredecessor(t *testing.T, tree *Tree, expectedValue string,
-	expectedFound bool) {
-
-	_, value, found := tree.GetPredecessor([]byte(expectedValue))
-	assert.Equal(t, expectedFound, found, "expected %s, got nothing", expectedValue)
+func assertGetPredecessor(t *testing.T, tree *Tree, key string, expectedFound bool) {
+	matchedKey, value, found := tree.GetPredecessor([]byte(key))
+	assert.Equal(t, expectedFound, found)
 	if expectedFound && value != nil {
-		assert.Equal(t, expectedValue, value.(string))
+		assert.Equal(t, string(matchedKey), value.(string))
 	}
 }
 
-func assertGetPredecessorCheckKey(t *testing.T, tree *Tree, expectedValue string,
-	expectedFound bool, expectedKey string) {
+func assertGetPredecessorCheckKey(t *testing.T, tree *Tree, key string,
+	expectedKey string) {
 
-	key, value, found := tree.GetPredecessor([]byte(expectedValue))
-	assert.Equal(t, expectedFound, found, "expected %s, got nothing", expectedValue)
-	if expectedFound && value != nil {
-		assert.Equal(t, expectedKey, string(key))
+	matchedKey, value, found := tree.GetPredecessor([]byte(key))
+	assert.True(t, found, "expected %s, got nothing", key)
+	if value != nil {
+		assert.Equal(t, expectedKey, string(matchedKey))
 		assert.Equal(t, expectedKey, value.(string))
 	}
 }
@@ -115,17 +114,56 @@ func TestGetPredecessor_Base(t *testing.T) {
 	tree.Insert([]byte("sth"), "sth")
 	assertGetPredecessor(t, tree, "th", false)
 	assertGetPredecessor(t, tree, "else", false)
-	assertGetPredecessorCheckKey(t, tree, "sth", true, "sth")
-	assertGetPredecessorCheckKey(t, tree, "any sth", true, "sth")
+	assertGetPredecessorCheckKey(t, tree, "sth", "sth")
+	assertGetPredecessorCheckKey(t, tree, "any sth", "sth")
 
 	tree.Insert([]byte("else sth"), "else sth")
 	assertGetPredecessor(t, tree, "sth", true)
-	assertGetPredecessorCheckKey(t, tree, "lse sth", true, "sth")
-	assertGetPredecessorCheckKey(t, tree, "any else sth", true, "else sth")
+	assertGetPredecessorCheckKey(t, tree, "lse sth", "sth")
+	assertGetPredecessorCheckKey(t, tree, "any else sth", "else sth")
 
 	tree.Insert([]byte("any sth"), "tenth")
 	assertGetPredecessor(t, tree, "th", false)
 	assertGetPredecessor(t, tree, "fourth", false)
+}
+
+func assertGetSuccessor(t *testing.T, tree *Tree, key string, expectedFound bool) {
+	matchedKey, value, found := tree.GetSuccessor([]byte(key))
+	assert.Equal(t, expectedFound, found)
+	if expectedFound && value != nil {
+		assert.Equal(t, string(matchedKey), value.(string))
+	}
+}
+
+func assertGetSuccessorCheckKey(t *testing.T, tree *Tree, key string,
+	expectedKey string) {
+
+	matchedKey, value, found := tree.GetSuccessor([]byte(key))
+	assert.True(t, found, "expected %s, got nothing", key)
+	if value != nil {
+		assert.Equal(t, expectedKey, string(matchedKey))
+		assert.Equal(t, expectedKey, value.(string))
+	}
+}
+
+func TestGetSuccessor_EmptyTree(t *testing.T) {
+	tree := NewTree()
+	assertGetSuccessor(t, tree, "apple", false)
+}
+
+func TestGetSuccessor_Base(t *testing.T) {
+	tree := NewTree()
+	tree.Insert([]byte("sth"), "sth")
+	assertGetSuccessor(t, tree, "sth", true)
+	assertGetSuccessorCheckKey(t, tree, "th", "sth")
+	assertGetSuccessor(t, tree, "else sth", false)
+
+	tree.Insert([]byte("any sth"), "any sth")
+	tree.Insert([]byte("else any sth"), "else any sth")
+	assertGetSuccessorCheckKey(t, tree, "y sth", "any sth")
+
+	tree.Insert([]byte("goose any sth"), "goose any sth")
+	assertGetSuccessor(t, tree, "geese any sth", false)
 }
 
 func TestRemove_EmptyTree(t *testing.T) {
@@ -174,11 +212,11 @@ func TestWalk(t *testing.T) {
 }
 
 func dumpTestData(wordRef map[string]bool, tree *Tree, ops []string, errMsg string) {
-	tmpfile, _ := ioutil.TempFile("", "suffix_test_")
-	defer tmpfile.Close()
+	opDumpFile, _ := ioutil.TempFile("", "suffix_test_op_dump_")
+	defer opDumpFile.Close()
 	for _, op := range ops {
 		println(op)
-		tmpfile.Write(append([]byte(op), []byte("\n")...))
+		opDumpFile.Write(append([]byte(op), []byte("\n")...))
 	}
 	println("\nWord status:")
 	for word, existed := range wordRef {
@@ -189,6 +227,8 @@ func dumpTestData(wordRef map[string]bool, tree *Tree, ops []string, errMsg stri
 		}
 	}
 	println("\nTree nodes:")
+	nodeDumpFile, _ := ioutil.TempFile("", "suffix_test_node_dump_")
+	defer nodeDumpFile.Close()
 	tree.walkNode(func(labels [][]byte, value interface{}) {
 		if labels[0] == nil {
 			return
@@ -198,9 +238,12 @@ func dumpTestData(wordRef map[string]bool, tree *Tree, ops []string, errMsg stri
 			suffixes = append(suffixes, string(l))
 		}
 		println(strings.Join(suffixes, ":"))
+
+		nodeDumpFile.Write(append(bytes.Join(labels, []byte(":")), []byte("\n")...))
 	})
 	println(errMsg)
-	println("Also dump operation records to", tmpfile.Name())
+	println("Also dump operation records to", opDumpFile.Name())
+	println("Also dump final node status to", nodeDumpFile.Name())
 }
 
 func checkLabelOrder(tree *Tree) (string, bool) {
@@ -222,17 +265,19 @@ func checkLabelOrder(tree *Tree) (string, bool) {
 	return msg, inOrder
 }
 
-func TestAlhoc(t *testing.T) {
-	if !*RunAlhoc {
-		t.SkipNow()
-	}
-	println(`
+const banner = `
 Start alhoc test.
 Repeat below steps in 30 seconds.
 1. Generate 256 random words, and insert them into a new Tree.
 2. Perform 2048 random operations with pre-generated 256 words.
 3. Dump the generated test data once failed.
-`)
+`
+
+func TestAlhoc(t *testing.T) {
+	if !*RunAlhoc {
+		t.SkipNow()
+	}
+	println(banner)
 	OpNum := 2048
 	WordNum := 256
 	// Put some variable definitions outside for loop,
@@ -311,9 +356,9 @@ Repeat below steps in 30 seconds.
 				}
 			}
 			word := randomWords[rand.Intn(WordNum)]
-			switch rand.Intn(4) {
+			existed := wordRef[word]
+			switch rand.Intn(5) {
 			case 0:
-				existed := wordRef[word]
 				ops = append(ops, "Get\t"+word)
 				value, found := tree.Get([]byte(word))
 				if found {
@@ -330,7 +375,6 @@ Repeat below steps in 30 seconds.
 					goto failed
 				}
 			case 1:
-				existed := wordRef[word]
 				ops = append(ops, "Insert\t"+word)
 				value, _ := tree.Insert([]byte(word), word)
 				if existed {
@@ -350,7 +394,6 @@ Repeat below steps in 30 seconds.
 					goto failed
 				}
 			case 2:
-				existed := wordRef[word]
 				ops = append(ops, "Remove\t"+word)
 				value, found := tree.Remove([]byte(word))
 				wordRef[word] = false
@@ -377,7 +420,6 @@ Repeat below steps in 30 seconds.
 					goto failed
 				}
 			case 3:
-				existed := wordRef[word]
 				mismatchLabel := make([]byte, rand.Intn(3))
 				for i := range mismatchLabel {
 					mismatchLabel[i] = mismatchLetters[rand.Intn(len(mismatchLetters))]
@@ -404,6 +446,35 @@ Repeat below steps in 30 seconds.
 								suffix, string(key))
 							goto failed
 						}
+					}
+				}
+			case 4:
+				suffix := word[:len(word)]
+				bsuffix := []byte(suffix)
+				ops = append(ops, "GetSuccessor\t"+suffix)
+				matchedKey, matchedValue, found := tree.GetSuccessor(bsuffix)
+				if !found {
+					if existed {
+						errMsg = fmt.Sprintf("expect getSuccessor found %v with %v, actual not found",
+							word, suffix)
+						goto failed
+					}
+				} else {
+					keyFound := false
+					matched := false
+					// Walk method walks through the tree as the same way as GetSuccessor
+					tree.Walk(func(key []byte, value interface{}) {
+						if !keyFound && bytes.HasSuffix(key, bsuffix) {
+							keyFound = true
+							word = string(key)
+							matched = bytes.Equal(matchedKey, key) &&
+								matchedValue.(string) == matchedValue.(string)
+						}
+					})
+					if !matched {
+						errMsg = fmt.Sprintf("expect getSuccessor found %v with %v, actual found %v",
+							word, suffix, string(matchedKey))
+						goto failed
 					}
 				}
 			}
