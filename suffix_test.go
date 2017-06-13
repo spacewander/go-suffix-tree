@@ -257,6 +257,28 @@ func TestWalkSuffix_Base(t *testing.T) {
 	assert.Equal(t, 0, count)
 }
 
+func TestInvalidInput(t *testing.T) {
+	lists, tree := getFixtures()
+	count := len(lists)
+	tree.WalkSuffix(nil, func(key []byte, value interface{}) bool {
+		count--
+		return false
+	})
+	assert.Equal(t, 0, count)
+
+	_, ok := tree.Insert(nil, "any")
+	assert.False(t, ok)
+
+	_, found := tree.Get(nil)
+	assert.False(t, found)
+
+	_, found = tree.Remove(nil)
+	assert.False(t, found)
+
+	_, _, found = tree.LongestSuffix(nil)
+	assert.False(t, found)
+}
+
 func dumpTestData(wordRef map[string]bool, tree *Tree, ops []string, errMsg string) {
 	opDumpFile, _ := ioutil.TempFile("", "suffix_test_op_dump_")
 	defer opDumpFile.Close()
@@ -266,7 +288,7 @@ func dumpTestData(wordRef map[string]bool, tree *Tree, ops []string, errMsg stri
 	}
 	println("\nWord status:")
 	words := []string{}
-	for word, _ := range wordRef {
+	for word := range wordRef {
 		words = append(words, word)
 	}
 	sort.Sort(sort.StringSlice(words))
@@ -371,7 +393,7 @@ func TestAlhoc(t *testing.T) {
 			bs := string(b)
 			if _, ok := wordRef[bs]; !ok {
 				wordRef[bs] = true
-				wordCount += 1
+				wordCount++
 			}
 			ops = append(ops, "Insert\t"+bs)
 			tree.Insert(b, bs)
@@ -398,7 +420,7 @@ func TestAlhoc(t *testing.T) {
 				existedNum := 0
 				for _, existed := range wordRef {
 					if existed {
-						existedNum += 1
+						existedNum++
 					}
 				}
 				if tree.Len() != existedNum {

@@ -136,11 +136,11 @@ func (node *_Node) insert(originKey []byte, key []byte, value interface{}) (
 				//	insert a new Leaf
 				newNode := &_Node{
 					edges: []*_Edge{
-						&_Edge{
+						{
 							label: []byte{},
 							point: point,
 						},
-						&_Edge{
+						{
 							label: label,
 							point: &_Leaf{
 								originKey: originKey,
@@ -433,11 +433,13 @@ func (node *_Node) walkNode(suffix [][]byte, f func(labels [][]byte, value inter
 	}
 }
 
+// Tree represents a suffix tree.
 type Tree struct {
 	root      *_Node
 	leavesNum int
 }
 
+// NewTree create a suffix tree for future usage.
 func NewTree() *Tree {
 	return &Tree{
 		root: &_Node{
@@ -455,12 +457,12 @@ func (tree *Tree) Insert(key []byte, value interface{}) (oldValue interface{}, o
 	}
 	oldValue, ok = tree.root.insert(key, key, value)
 	if ok && oldValue == nil {
-		tree.leavesNum += 1
+		tree.leavesNum++
 	}
 	return oldValue, ok
 }
 
-// Given a key, Get returns the value itself and a boolean to indicate
+// Get returns the value of given key and a boolean to indicate
 // whether the value is found.
 func (tree *Tree) Get(key []byte) (value interface{}, found bool) {
 	if key == nil || len(tree.root.edges) == 0 {
@@ -480,7 +482,7 @@ func (tree *Tree) LongestSuffix(key []byte) (matchedKey []byte, value interface{
 	return tree.root.longestSuffix(key)
 }
 
-// Given a key, Remove returns the value itself and a boolean to indicate
+// Remove returns the value of given key and a boolean to indicate
 // whethe the value is found. Then the value will be removed.
 func (tree *Tree) Remove(key []byte) (oldValue interface{}, found bool) {
 	if key == nil || len(tree.root.edges) == 0 {
@@ -488,7 +490,7 @@ func (tree *Tree) Remove(key []byte) (oldValue interface{}, found bool) {
 	}
 	oldValue, found, _ = tree.root.remove(key)
 	if found {
-		tree.leavesNum -= 1
+		tree.leavesNum--
 	}
 	return oldValue, found
 }
