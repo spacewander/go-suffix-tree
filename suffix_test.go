@@ -86,19 +86,19 @@ func TestGet_Base(t *testing.T) {
 	assertGet(t, tree, "any sth else", true)
 }
 
-// GetPredecessor is mostly like Get, but please notice their slight differnces.
-func assertGetPredecessor(t *testing.T, tree *Tree, key string, expectedFound bool) {
-	matchedKey, value, found := tree.GetPredecessor([]byte(key))
+// LongestSuffix is mostly like Get, but please notice their slight differnces.
+func assertLongestSuffix(t *testing.T, tree *Tree, key string, expectedFound bool) {
+	matchedKey, value, found := tree.LongestSuffix([]byte(key))
 	assert.Equal(t, expectedFound, found)
 	if expectedFound && value != nil {
 		assert.Equal(t, string(matchedKey), value.(string))
 	}
 }
 
-func assertGetPredecessorCheckKey(t *testing.T, tree *Tree, key string,
+func assertLongestSuffixCheckKey(t *testing.T, tree *Tree, key string,
 	expectedKey string) {
 
-	matchedKey, value, found := tree.GetPredecessor([]byte(key))
+	matchedKey, value, found := tree.LongestSuffix([]byte(key))
 	assert.True(t, found, "expected %s, got nothing", key)
 	if value != nil {
 		assert.Equal(t, expectedKey, string(matchedKey))
@@ -106,66 +106,27 @@ func assertGetPredecessorCheckKey(t *testing.T, tree *Tree, key string,
 	}
 }
 
-func TestGetPredecessor_EmptyTree(t *testing.T) {
+func TestLongestSuffix_EmptyTree(t *testing.T) {
 	tree := NewTree()
-	assertGetPredecessor(t, tree, "banana", false)
+	assertLongestSuffix(t, tree, "banana", false)
 }
 
-func TestGetPredecessor_Base(t *testing.T) {
+func TestLongestSuffix_Base(t *testing.T) {
 	tree := NewTree()
 	tree.Insert([]byte("sth"), "sth")
-	assertGetPredecessor(t, tree, "th", false)
-	assertGetPredecessor(t, tree, "else", false)
-	assertGetPredecessorCheckKey(t, tree, "sth", "sth")
-	assertGetPredecessorCheckKey(t, tree, "any sth", "sth")
+	assertLongestSuffix(t, tree, "th", false)
+	assertLongestSuffix(t, tree, "else", false)
+	assertLongestSuffixCheckKey(t, tree, "sth", "sth")
+	assertLongestSuffixCheckKey(t, tree, "any sth", "sth")
 
 	tree.Insert([]byte("else sth"), "else sth")
-	assertGetPredecessor(t, tree, "sth", true)
-	assertGetPredecessorCheckKey(t, tree, "lse sth", "sth")
-	assertGetPredecessorCheckKey(t, tree, "any else sth", "else sth")
+	assertLongestSuffix(t, tree, "sth", true)
+	assertLongestSuffixCheckKey(t, tree, "lse sth", "sth")
+	assertLongestSuffixCheckKey(t, tree, "any else sth", "else sth")
 
 	tree.Insert([]byte("any sth"), "tenth")
-	assertGetPredecessor(t, tree, "th", false)
-	assertGetPredecessor(t, tree, "fourth", false)
-}
-
-func assertGetSuccessor(t *testing.T, tree *Tree, key string, expectedFound bool) {
-	matchedKey, value, found := tree.GetSuccessor([]byte(key))
-	assert.Equal(t, expectedFound, found)
-	if expectedFound && value != nil {
-		assert.Equal(t, string(matchedKey), value.(string))
-	}
-}
-
-func assertGetSuccessorCheckKey(t *testing.T, tree *Tree, key string,
-	expectedKey string) {
-
-	matchedKey, value, found := tree.GetSuccessor([]byte(key))
-	assert.True(t, found, "expected %s, got nothing", key)
-	if value != nil {
-		assert.Equal(t, expectedKey, string(matchedKey))
-		assert.Equal(t, expectedKey, value.(string))
-	}
-}
-
-func TestGetSuccessor_EmptyTree(t *testing.T) {
-	tree := NewTree()
-	assertGetSuccessor(t, tree, "apple", false)
-}
-
-func TestGetSuccessor_Base(t *testing.T) {
-	tree := NewTree()
-	tree.Insert([]byte("sth"), "sth")
-	assertGetSuccessor(t, tree, "sth", true)
-	assertGetSuccessorCheckKey(t, tree, "th", "sth")
-	assertGetSuccessor(t, tree, "else sth", false)
-
-	tree.Insert([]byte("any sth"), "any sth")
-	tree.Insert([]byte("else any sth"), "else any sth")
-	assertGetSuccessorCheckKey(t, tree, "y sth", "any sth")
-
-	tree.Insert([]byte("goose any sth"), "goose any sth")
-	assertGetSuccessor(t, tree, "geese any sth", false)
+	assertLongestSuffix(t, tree, "th", false)
+	assertLongestSuffix(t, tree, "fourth", false)
 }
 
 func TestRemove_EmptyTree(t *testing.T) {
@@ -515,8 +476,8 @@ func TestAlhoc(t *testing.T) {
 					mismatchLabel[i] = mismatchLetters[rand.Intn(len(mismatchLetters))]
 				}
 				suffix := string(mismatchLabel) + word
-				ops = append(ops, "GetPredecessor\t"+suffix)
-				key, value, found := tree.GetPredecessor([]byte(suffix))
+				ops = append(ops, "LongestSuffix\t"+suffix)
+				key, value, found := tree.LongestSuffix([]byte(suffix))
 				if existed {
 					if !found {
 						errMsg = fmt.Sprintf("expect getPredecessor found %v with %v, actual not found",
@@ -539,35 +500,6 @@ func TestAlhoc(t *testing.T) {
 					}
 				}
 			case 4:
-				suffix := word[:len(word)]
-				bsuffix := []byte(suffix)
-				ops = append(ops, "GetSuccessor\t"+suffix)
-				matchedKey, matchedValue, found := tree.GetSuccessor(bsuffix)
-				if !found {
-					if existed {
-						errMsg = fmt.Sprintf("expect getSuccessor found %v with %v, actual not found",
-							word, suffix)
-						goto failed
-					}
-				} else {
-					matched := false
-					// Walk method walks through the tree as the same way as GetSuccessor
-					tree.Walk(func(key []byte, value interface{}) bool {
-						if bytes.HasSuffix(key, bsuffix) {
-							word = string(key)
-							matched = bytes.Equal(matchedKey, key) &&
-								matchedValue.(string) == matchedValue.(string)
-							return true
-						}
-						return false
-					})
-					if !matched {
-						errMsg = fmt.Sprintf("expect getSuccessor found %v with %v, actual found %v",
-							word, suffix, string(matchedKey))
-						goto failed
-					}
-				}
-			case 5:
 				var suffix string
 				if len(word) > 0 {
 					suffix = word[rand.Intn(len(word)):]

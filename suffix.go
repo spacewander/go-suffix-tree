@@ -37,7 +37,7 @@ type _Edge struct {
 }
 
 type _Leaf struct {
-	// For GetPredecessor and so on. We choice to use more memory(24 bytes per node)
+	// For LongestSuffix and so on. We choice to use more memory(24 bytes per node)
 	// over appending keys each time.
 	originKey []byte
 	value     interface{}
@@ -249,7 +249,7 @@ func (node *_Node) get(key []byte) (value interface{}, found bool) {
 	return nil, false
 }
 
-func (node *_Node) getPredecessor(key []byte) (matchedKey []byte, value interface{}, found bool) {
+func (node *_Node) longestSuffix(key []byte) (matchedKey []byte, value interface{}, found bool) {
 	edges := node.edges
 	start := 0
 	if len(edges[0].label) == 0 {
@@ -273,7 +273,7 @@ func (node *_Node) getPredecessor(key []byte) (matchedKey []byte, value interfac
 				case *_Leaf:
 					return point.originKey, point.value, true
 				case *_Node:
-					matchedKey, value, found := point.getPredecessor(subKey)
+					matchedKey, value, found := point.longestSuffix(subKey)
 					if found {
 						return matchedKey, value, found
 					}
@@ -286,7 +286,7 @@ func (node *_Node) getPredecessor(key []byte) (matchedKey []byte, value interfac
 				case *_Leaf:
 					return point.originKey, point.value, true
 				case *_Node:
-					matchedKey, value, found := point.getPredecessor([]byte{})
+					matchedKey, value, found := point.longestSuffix([]byte{})
 					if found {
 						return matchedKey, value, found
 					}
@@ -301,48 +301,6 @@ func (node *_Node) getPredecessor(key []byte) (matchedKey []byte, value interfac
 	if start == 1 {
 		leaf, _ := edges[0].point.(*_Leaf)
 		return leaf.originKey, leaf.value, true
-	}
-
-	return nil, nil, false
-}
-
-func (node *_Node) getSuccessor(key []byte) (matchedKey []byte, value interface{}, found bool) {
-	edges := node.edges
-	start := 0
-	if len(edges[0].label) == 0 {
-		// handle empty label as a special case, so the rest of labels don't share
-		// common suffix
-		if len(key) == 0 {
-			leaf, _ := edges[0].point.(*_Leaf)
-			return leaf.originKey, leaf.value, true
-		}
-		start++
-	}
-
-	keyLen := len(key)
-	for i := start; i < len(edges); i++ {
-		edge := edges[i]
-		edgeLabelLen := len(edge.label)
-		if keyLen > edgeLabelLen {
-			if bytes.Equal(key[len(key)-len(edge.label):], edge.label) {
-				subKey := key[:len(key)-len(edge.label)]
-				switch point := edge.point.(type) {
-				case *_Leaf:
-					return nil, nil, false
-				case *_Node:
-					return point.getSuccessor(subKey)
-				}
-			}
-		} else {
-			if bytes.HasSuffix(edge.label, key) {
-				switch point := edge.point.(type) {
-				case *_Leaf:
-					return point.originKey, point.value, true
-				case *_Node:
-					return point.getSuccessor([]byte{})
-				}
-			}
-		}
 	}
 
 	return nil, nil, false
@@ -511,25 +469,15 @@ func (tree *Tree) Get(key []byte) (value interface{}, found bool) {
 	return tree.root.get(key)
 }
 
-// GetPredecessor is mostly like Get.
+// LongestSuffix is mostly like Get.
 // It returns the key which is the longest suffix of the given key,
 // and the value referred by this key.
 // Plus a boolean to indicate whether the key/value, is found.
-func (tree *Tree) GetPredecessor(key []byte) (matchedKey []byte, value interface{}, found bool) {
+func (tree *Tree) LongestSuffix(key []byte) (matchedKey []byte, value interface{}, found bool) {
 	if key == nil || len(tree.root.edges) == 0 {
 		return nil, nil, false
 	}
-	return tree.root.getPredecessor(key)
-}
-
-// GetSuccessor returns the shortest key of which given key is the suffix of it.
-// Plus the value referred by this key and a boolean to indicate whether the key is found.
-// Note that if multiple keys matched, which one would be returned is undefined.
-func (tree *Tree) GetSuccessor(key []byte) (matchedKey []byte, value interface{}, found bool) {
-	if len(tree.root.edges) == 0 {
-		return nil, nil, false
-	}
-	return tree.root.getSuccessor(key)
+	return tree.root.longestSuffix(key)
 }
 
 // Given a key, Remove returns the value itself and a boolean to indicate
@@ -573,12 +521,7 @@ func (tree *Tree) WalkSuffix(suffix []byte, f func(key []byte, value interface{}
 				case *_Leaf:
 					f(point.originKey, point.value)
 				case *_Node:
-					if extraLabel == nil {
-						extraLabel = suffix
-					} else {
-						extraLabel = append(extraLabel, suffix...)
-					}
-					point.walk(extraLabel, f, &stop)
+					point.walk(append(extraLabel, suffix...), f, &stop)
 				}
 			}
 		}
