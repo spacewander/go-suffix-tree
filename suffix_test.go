@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -20,7 +21,7 @@ var (
 // go test -args -alhoc to enable alhoc testing
 func TestMain(m *testing.M) {
 	flag.Parse()
-	m.Run()
+	os.Exit(m.Run())
 }
 
 func getFixtures() ([]string, *Tree) {
@@ -201,14 +202,35 @@ func TestRemove_Base(t *testing.T) {
 
 func TestWalk(t *testing.T) {
 	lists, tree := getFixtures()
-	result := map[string]string{}
-	tree.Walk(func(key []byte, value interface{}) {
-		result[string(key)] = value.(string)
-	})
 
+	result := map[string]string{}
+	tree.Walk(func(key []byte, value interface{}) bool {
+		result[string(key)] = value.(string)
+		return false
+	})
 	for _, s := range lists {
 		assert.Equal(t, s, result[s])
 	}
+
+	count := 0
+	tree.Walk(func(key []byte, value interface{}) bool {
+		if string(key) == "believable" {
+			return true
+		}
+		count++
+		return false
+	})
+	assert.Equal(t, 3, count)
+
+	count = 0
+	tree.Walk(func(key []byte, value interface{}) bool {
+		if string(key) == "something" {
+			return true
+		}
+		count++
+		return false
+	})
+	assert.Equal(t, 15, count)
 }
 
 func dumpTestData(wordRef map[string]bool, tree *Tree, ops []string, errMsg string) {
@@ -460,16 +482,16 @@ func TestAlhoc(t *testing.T) {
 						goto failed
 					}
 				} else {
-					keyFound := false
 					matched := false
 					// Walk method walks through the tree as the same way as GetSuccessor
-					tree.Walk(func(key []byte, value interface{}) {
-						if !keyFound && bytes.HasSuffix(key, bsuffix) {
-							keyFound = true
+					tree.Walk(func(key []byte, value interface{}) bool {
+						if bytes.HasSuffix(key, bsuffix) {
 							word = string(key)
 							matched = bytes.Equal(matchedKey, key) &&
 								matchedValue.(string) == matchedValue.(string)
+							return true
 						}
+						return false
 					})
 					if !matched {
 						errMsg = fmt.Sprintf("expect getSuccessor found %v with %v, actual found %v",

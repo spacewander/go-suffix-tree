@@ -412,13 +412,16 @@ func (node *_Node) remove(key []byte) (value interface{}, found bool, childRemov
 	return nil, false, false
 }
 
-func (node *_Node) walk(suffix []byte, f func(key []byte, value interface{})) {
+func (node *_Node) walk(suffix []byte, f func(key []byte, value interface{}) bool, stop *bool) {
 	for _, edge := range node.edges {
+		if *stop {
+			return
+		}
 		switch point := edge.point.(type) {
 		case *_Leaf:
-			f(append(edge.label, suffix...), point.value)
+			*stop = f(append(edge.label, suffix...), point.value)
 		case *_Node:
-			point.walk(append(edge.label, suffix...), f)
+			point.walk(append(edge.label, suffix...), f, stop)
 		}
 	}
 }
@@ -517,10 +520,12 @@ func (tree *Tree) Len() int {
 	return tree.leavesNum
 }
 
-// Walk through the tree, call function with key and value. Don't rely on the
-// travelling order.
-func (tree *Tree) Walk(f func(key []byte, value interface{})) {
-	tree.root.walk([]byte{}, f)
+// Walk through the tree, call function with key and value.
+// Once the function returns true, it will stop walking.
+// The travelling order is DFS, the shortest key comes first in the same suffix level.
+func (tree *Tree) Walk(f func(key []byte, value interface{}) bool) {
+	stop := false
+	tree.root.walk([]byte{}, f, &stop)
 }
 
 // This API is for testing/debug
