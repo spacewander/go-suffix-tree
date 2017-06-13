@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -233,6 +234,68 @@ func TestWalk(t *testing.T) {
 	assert.Equal(t, 15, count)
 }
 
+func TestWalkSuffix_EmptyTree(t *testing.T) {
+	tree := NewTree()
+	count := 0
+	tree.WalkSuffix([]byte{}, func(key []byte, value interface{}) bool {
+		count++
+		return false
+	})
+	assert.Equal(t, 0, count)
+}
+
+func TestWalkSuffix_Base(t *testing.T) {
+	lists, tree := getFixtures()
+
+	count := len(lists)
+	tree.WalkSuffix([]byte{}, func(key []byte, value interface{}) bool {
+		count--
+		return false
+	})
+	assert.Equal(t, 0, count)
+
+	count = 0
+	tree.WalkSuffix([]byte("nonexist"), func(key []byte, value interface{}) bool {
+		count--
+		return false
+	})
+	assert.Equal(t, 0, count)
+
+	count = 5
+	suffix := []byte("able")
+	tree.WalkSuffix(suffix, func(key []byte, value interface{}) bool {
+		if !bytes.HasSuffix(key, suffix) {
+			assert.FailNowf(t, "The walked key %v should have given suffix %v",
+				string(key), string(suffix))
+		}
+		count--
+		return false
+	})
+	assert.Equal(t, 0, count)
+
+	count = 2
+	tree.WalkSuffix([]byte("word"), func(key []byte, value interface{}) bool {
+		count--
+		return false
+	})
+	assert.Equal(t, 0, count)
+
+	count = 1
+	suffix = []byte("redible")
+	tree.WalkSuffix(suffix, func(key []byte, value interface{}) bool {
+		count--
+		return false
+	})
+	assert.Equal(t, 0, count)
+
+	count = 0
+	tree.WalkSuffix([]byte("anything"), func(key []byte, value interface{}) bool {
+		count--
+		return false
+	})
+	assert.Equal(t, 0, count)
+}
+
 func dumpTestData(wordRef map[string]bool, tree *Tree, ops []string, errMsg string) {
 	opDumpFile, _ := ioutil.TempFile("", "suffix_test_op_dump_")
 	defer opDumpFile.Close()
@@ -241,8 +304,13 @@ func dumpTestData(wordRef map[string]bool, tree *Tree, ops []string, errMsg stri
 		opDumpFile.Write(append([]byte(op), []byte("\n")...))
 	}
 	println("\nWord status:")
-	for word, existed := range wordRef {
-		if existed {
+	words := []string{}
+	for word, _ := range wordRef {
+		words = append(words, word)
+	}
+	sort.Sort(sort.StringSlice(words))
+	for _, word := range words {
+		if wordRef[word] {
 			println(word, "existed")
 		} else {
 			println(word, "removed")
@@ -304,9 +372,9 @@ func TestAlhoc(t *testing.T) {
 	WordNum := 256
 	// Put some variable definitions outside for loop,
 	// so that we could refer it in test dump.
-	wordRef := map[string]bool{}
-	randomWords := []string{}
-	ops := []string{}
+	var wordRef map[string]bool
+	var randomWords []string
+	var ops []string
 	rand.Seed(time.Now().UnixNano())
 	letters := []byte("abcdefghijklmnopqrstuvwxyz")
 	mismatchLetters := []byte("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -379,7 +447,7 @@ func TestAlhoc(t *testing.T) {
 			}
 			word := randomWords[rand.Intn(WordNum)]
 			existed := wordRef[word]
-			switch rand.Intn(5) {
+			switch rand.Intn(6) {
 			case 0:
 				ops = append(ops, "Get\t"+word)
 				value, found := tree.Get([]byte(word))
@@ -496,6 +564,37 @@ func TestAlhoc(t *testing.T) {
 					if !matched {
 						errMsg = fmt.Sprintf("expect getSuccessor found %v with %v, actual found %v",
 							word, suffix, string(matchedKey))
+						goto failed
+					}
+				}
+			case 5:
+				var suffix string
+				if len(word) > 0 {
+					suffix = word[rand.Intn(len(word)):]
+				}
+				bsuffix := []byte(suffix)
+				ops = append(ops, "WalkSuffix\t"+suffix)
+				shouldMatchKeys := []string{}
+				matchedKeys := map[string]bool{}
+				tree.Walk(func(key []byte, value interface{}) bool {
+					if bytes.HasSuffix(key, bsuffix) {
+						shouldMatchKeys = append(shouldMatchKeys, string(key))
+					}
+					return false
+				})
+				tree.WalkSuffix(bsuffix, func(key []byte, value interface{}) bool {
+					matchedKeys[string(key)] = true
+					return false
+				})
+				if len(shouldMatchKeys) != len(matchedKeys) {
+					errMsg = fmt.Sprintf("expect walkSuffix with %v matches %v keys, actual %v",
+						suffix, len(shouldMatchKeys), len(matchedKeys))
+					goto failed
+				}
+				for _, s := range shouldMatchKeys {
+					if _, ok := matchedKeys[s]; !ok {
+						errMsg = fmt.Sprintf("expect walkSuffix with %v travels %v",
+							suffix, s)
 						goto failed
 					}
 				}

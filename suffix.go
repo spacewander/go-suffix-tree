@@ -106,7 +106,7 @@ func (node *_Node) insert(originKey []byte, key []byte, value interface{}) (
 			leaf.value = value
 			return oldValue, true
 		}
-		start += 1
+		start++
 	}
 	for i := start; i < len(node.edges); i++ {
 		edge := node.edges[i]
@@ -215,7 +215,7 @@ func (node *_Node) get(key []byte) (value interface{}, found bool) {
 			leaf, _ := edges[0].point.(*_Leaf)
 			return leaf.value, true
 		}
-		start += 1
+		start++
 	}
 
 	keyLen := len(key)
@@ -259,7 +259,7 @@ func (node *_Node) getPredecessor(key []byte) (matchedKey []byte, value interfac
 			leaf, _ := edges[0].point.(*_Leaf)
 			return leaf.originKey, leaf.value, true
 		}
-		start += 1
+		start++
 	}
 
 	keyLen := len(key)
@@ -277,7 +277,7 @@ func (node *_Node) getPredecessor(key []byte) (matchedKey []byte, value interfac
 					if found {
 						return matchedKey, value, found
 					}
-					// No exact match, fallback to suffix match
+					break
 				}
 			}
 		} else if keyLen == edgeLabelLen {
@@ -290,6 +290,7 @@ func (node *_Node) getPredecessor(key []byte) (matchedKey []byte, value interfac
 					if found {
 						return matchedKey, value, found
 					}
+					break
 				}
 			}
 		} else {
@@ -315,7 +316,7 @@ func (node *_Node) getSuccessor(key []byte) (matchedKey []byte, value interface{
 			leaf, _ := edges[0].point.(*_Leaf)
 			return leaf.originKey, leaf.value, true
 		}
-		start += 1
+		start++
 	}
 
 	keyLen := len(key)
@@ -370,7 +371,7 @@ func (node *_Node) remove(key []byte) (value interface{}, found bool, childRemov
 			node.removeEdge(0)
 			return value, true, true
 		}
-		start += 1
+		start++
 	}
 
 	keyLen := len(key)
@@ -410,6 +411,32 @@ func (node *_Node) remove(key []byte) (value interface{}, found bool, childRemov
 	}
 
 	return nil, false, false
+}
+
+// return either _Leaf or _Node as interface{}
+func (node *_Node) getPointHasSuffix(key []byte) (interface{}, []byte, bool) {
+	edges := node.edges
+	keyLen := len(key)
+	for i := len(edges) - 1; i >= 0; i-- {
+		edge := edges[i]
+		edgeLabelLen := len(edge.label)
+		if keyLen > edgeLabelLen {
+			if bytes.Equal(key[len(key)-len(edge.label):], edge.label) {
+				subKey := key[:len(key)-len(edge.label)]
+				switch point := edge.point.(type) {
+				case *_Leaf:
+					return nil, nil, false
+				case *_Node:
+					return point.getPointHasSuffix(subKey)
+				}
+			}
+		} else {
+			if bytes.HasSuffix(edge.label, key) {
+				return edge.point, edge.label[:len(edge.label)-len(key)], true
+			}
+		}
+	}
+	return nil, nil, false
 }
 
 func (node *_Node) walk(suffix []byte, f func(key []byte, value interface{}) bool, stop *bool) {
@@ -465,6 +492,9 @@ func NewTree() *Tree {
 // Insert suffix tree with given key and value. Return the previous value and a boolean to
 // indicate whether the insertion is successful.
 func (tree *Tree) Insert(key []byte, value interface{}) (oldValue interface{}, ok bool) {
+	if key == nil {
+		return nil, false
+	}
 	oldValue, ok = tree.root.insert(key, key, value)
 	if ok && oldValue == nil {
 		tree.leavesNum += 1
@@ -475,7 +505,7 @@ func (tree *Tree) Insert(key []byte, value interface{}) (oldValue interface{}, o
 // Given a key, Get returns the value itself and a boolean to indicate
 // whether the value is found.
 func (tree *Tree) Get(key []byte) (value interface{}, found bool) {
-	if len(tree.root.edges) == 0 {
+	if key == nil || len(tree.root.edges) == 0 {
 		return nil, false
 	}
 	return tree.root.get(key)
@@ -486,7 +516,7 @@ func (tree *Tree) Get(key []byte) (value interface{}, found bool) {
 // and the value referred by this key.
 // Plus a boolean to indicate whether the key/value, is found.
 func (tree *Tree) GetPredecessor(key []byte) (matchedKey []byte, value interface{}, found bool) {
-	if len(tree.root.edges) == 0 {
+	if key == nil || len(tree.root.edges) == 0 {
 		return nil, nil, false
 	}
 	return tree.root.getPredecessor(key)
@@ -505,7 +535,7 @@ func (tree *Tree) GetSuccessor(key []byte) (matchedKey []byte, value interface{}
 // Given a key, Remove returns the value itself and a boolean to indicate
 // whethe the value is found. Then the value will be removed.
 func (tree *Tree) Remove(key []byte) (oldValue interface{}, found bool) {
-	if len(tree.root.edges) == 0 {
+	if key == nil || len(tree.root.edges) == 0 {
 		return nil, false
 	}
 	oldValue, found, _ = tree.root.remove(key)
@@ -522,10 +552,37 @@ func (tree *Tree) Len() int {
 
 // Walk through the tree, call function with key and value.
 // Once the function returns true, it will stop walking.
-// The travelling order is DFS, the shortest key comes first in the same suffix level.
+// The travelling order is DFS, in the same suffix level the shortest key comes first.
 func (tree *Tree) Walk(f func(key []byte, value interface{}) bool) {
 	stop := false
 	tree.root.walk([]byte{}, f, &stop)
+}
+
+// WalkSuffix travels through nodes which have given suffix, calls function with key and value.
+// Once the function returns true, it will stop walking.
+// The travelling order is DFS, in the same suffix level the shortest key comes first.
+func (tree *Tree) WalkSuffix(suffix []byte, f func(key []byte, value interface{}) bool) {
+	if len(tree.root.edges) != 0 {
+		stop := false
+		if suffix == nil || len(suffix) == 0 {
+			tree.root.walk([]byte{}, f, &stop)
+		} else {
+			startingPoint, extraLabel, found := tree.root.getPointHasSuffix(suffix)
+			if found {
+				switch point := startingPoint.(type) {
+				case *_Leaf:
+					f(point.originKey, point.value)
+				case *_Node:
+					if extraLabel == nil {
+						extraLabel = suffix
+					} else {
+						extraLabel = append(extraLabel, suffix...)
+					}
+					point.walk(extraLabel, f, &stop)
+				}
+			}
+		}
+	}
 }
 
 // This API is for testing/debug
