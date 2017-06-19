@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-func ExampleInsert() {
+func ExampleTree_Insert() {
 	tree := NewTree()
 	tree.Insert([]byte("sth"), "sth")
 	oldValue, ok := tree.Insert([]byte("sth"), "else")
@@ -21,7 +21,7 @@ func ExampleInsert() {
 	// else
 }
 
-func ExampleGet() {
+func ExampleTree_Get() {
 	tree := NewTree()
 	tree.Insert([]byte("sth"), "sth")
 	value, found := tree.Get([]byte("sth"))
@@ -31,7 +31,7 @@ func ExampleGet() {
 	// Output: sth
 }
 
-func ExampleLongestSuffix() {
+func ExampleTree_LongestSuffix() {
 	tree := NewTree()
 	tree.Insert([]byte("table"), "table")
 	tree.Insert([]byte("able"), "able")
@@ -46,7 +46,7 @@ func ExampleLongestSuffix() {
 	// table
 }
 
-func ExampleRemove() {
+func ExampleTree_Remove() {
 	tree := NewTree()
 	tree.Insert([]byte("sth"), "sth")
 	oldValue, found := tree.Remove([]byte("sth"))
@@ -62,7 +62,7 @@ func ExampleRemove() {
 	// Already removed
 }
 
-func ExampleWalk() {
+func ExampleTree_Walk() {
 	tree := NewTree()
 	tree.Insert([]byte("able"), 1)
 	tree.Insert([]byte("table"), 2)
@@ -84,7 +84,7 @@ func ExampleWalk() {
 	// able
 }
 
-func ExampleWalkSuffix() {
+func ExampleTree_WalkSuffix() {
 	tree := NewTree()
 	tree.Insert([]byte("able"), 1)
 	tree.Insert([]byte("table"), 2)

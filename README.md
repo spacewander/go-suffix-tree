@@ -1,8 +1,8 @@
 [![Travis](https://travis-ci.org/spacewander/go-suffix-tree.svg?branch=master)](https://travis-ci.org/spacewander/go-suffix-tree)
 [![GoReportCard](http://goreportcard.com/badge/spacewander/go-suffix-tree)](http://goreportcard.com/report/spacewander/go-suffix-tree)
 [![codecov.io](https://codecov.io/github/spacewander/go-suffix-tree/coverage.svg?branch=master)](https://codecov.io/github/spacewander/go-suffix-tree?branch=master)
-[![license](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/spacewander/go-suffix-tree/blob/master/LICENSE)
-[![godoc](https://img.shields.io/badge/godoc-reference-blue.svg)](https://godoc.org/github.com/spacewander/go-suffix-tree)
+[![license](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/spacewander/go-suffix-tree/blob/master/LICENSE)
+[![godoc](https://img.shields.io/badge/godoc-reference-green.svg)](https://godoc.org/github.com/spacewander/go-suffix-tree)
 
 # go-suffix-tree
 
