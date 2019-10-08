@@ -1,12 +1,13 @@
 language: go
 
-script:
-  - go test -covermode count -coverprofile coverage.txt -args -alhoc
-after_success:
-  # See https://github.com/codecov/example-go
-  - bash <(curl -s https://codecov.io/bash)
-
 go:
-  - 1.6
-  - 1.7
-  - tip
+  - 1.12
+
+script:
+  - set -e
+  - curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.17.1
+  - ./bin/golangci-lint run ./...
+  -  go test -v -coverprofile cover.out -args -alhoc
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash) -f cover.out

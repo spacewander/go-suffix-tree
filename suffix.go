@@ -277,7 +277,6 @@ func (node *_Node) longestSuffix(key []byte) (matchedKey []byte, value interface
 					if found {
 						return matchedKey, value, found
 					}
-					break
 				}
 			}
 		} else if keyLen == edgeLabelLen {
@@ -290,7 +289,6 @@ func (node *_Node) longestSuffix(key []byte) (matchedKey []byte, value interface
 					if found {
 						return matchedKey, value, found
 					}
-					break
 				}
 			}
 		} else {
@@ -514,7 +512,7 @@ func (tree *Tree) Walk(f func(key []byte, value interface{}) bool) {
 func (tree *Tree) WalkSuffix(suffix []byte, f func(key []byte, value interface{}) bool) {
 	if len(tree.root.edges) != 0 {
 		stop := false
-		if suffix == nil || len(suffix) == 0 {
+		if len(suffix) == 0 {
 			tree.root.walk([]byte{}, f, &stop)
 		} else {
 			startingPoint, extraLabel, found := tree.root.getPointHasSuffix(suffix)
