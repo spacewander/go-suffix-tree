@@ -2,10 +2,11 @@ language: go
 
 go:
   - 1.12
+  - 1.13
 
 script:
   - set -e
-  - curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s v1.17.1
+  - curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s latest
   - ./bin/golangci-lint run ./...
   -  go test -v -coverprofile cover.out -args -alhoc
 
